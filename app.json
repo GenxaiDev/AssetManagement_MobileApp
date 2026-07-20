@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "GenxAI Asset",
+    "slug": "genx-asset-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#0B1F3A",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1F3A"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "39212241-e86e-42e3-b4f3-3a5eca03d2a8"
+      }
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      "expo-secure-store"
+    ]
+  }
+}

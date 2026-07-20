@@ -1,0 +1,72 @@
+import React from "react";
+import { View, ActivityIndicator } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { useFonts, Exo2_600SemiBold, Exo2_700Bold, Exo2_800ExtraBold } from "@expo-google-fonts/exo-2";
+import {
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_600SemiBold,
+} from "@expo-google-fonts/dm-sans";
+import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
+import LoginScreen from "./src/screens/LoginScreen";
+import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
+import DashboardScreen from "./src/screens/DashboardScreen";
+import AssetRegistrationScreen from "./src/screens/AssetRegistrationScreen";
+import IncidentRequestScreen from "./src/screens/IncidentRequestScreen";
+import ServiceRequestScreen from "./src/screens/ServiceRequestScreen";
+import { darkTheme } from "./src/theme/colors";
+
+const Stack = createNativeStackNavigator();
+
+function AppContent() {
+  const { theme, loading } = useTheme();
+
+  const [fontsLoaded] = useFonts({
+    Exo2_600SemiBold,
+    Exo2_700Bold,
+    Exo2_800ExtraBold,
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_600SemiBold,
+  });
+
+  if (!fontsLoaded || loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: darkTheme.background,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <ActivityIndicator color={darkTheme.accentBlue} size="large" />
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaProvider style={{ flex: 1 }}>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          <Stack.Screen name="Dashboard" component={DashboardScreen} />
+          <Stack.Screen name="AssetRegistration" component={AssetRegistrationScreen} />
+          <Stack.Screen name="IncidentRequest" component={IncidentRequestScreen} />
+          <Stack.Screen name="ServiceRequest" component={ServiceRequestScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}

@@ -1,0 +1,7 @@
+node_modules/**/*
+.expo/**/*
+.git/**/*
+android/build/**/*
+android/app/build/**/*
+*.log
+.DS_Store
