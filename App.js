@@ -12,7 +12,6 @@ import {
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import LoginScreen from "./src/screens/LoginScreen";
 import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
-import DashboardScreen from "./src/screens/DashboardScreen";
 import AssetRegistrationScreen from "./src/screens/AssetRegistrationScreen";
 import IncidentRequestScreen from "./src/screens/IncidentRequestScreen";
 import ServiceRequestScreen from "./src/screens/ServiceRequestScreen";
@@ -53,7 +52,6 @@ function AppContent() {
         <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-          <Stack.Screen name="Dashboard" component={DashboardScreen} />
           <Stack.Screen name="AssetRegistration" component={AssetRegistrationScreen} />
           <Stack.Screen name="IncidentRequest" component={IncidentRequestScreen} />
           <Stack.Screen name="ServiceRequest" component={ServiceRequestScreen} />

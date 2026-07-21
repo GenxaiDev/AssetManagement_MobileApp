@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,12 +9,12 @@ import {
   TextInput,
   Modal,
   FlatList,
+  Animated,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
-import { darkTheme, lightTheme } from "../theme/colors";
-import { spacing, radius, typography } from "../theme/colors";
+import { darkTheme, spacing, radius, typography } from "../theme/colors";
 import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
 import {
@@ -23,10 +23,16 @@ import {
   getAllClients,
   searchUsers,
   getAllAllocations,
+  getAllOems,
+  getAllVendors,
+  createIncidentRequest,
 } from "../api/request";
 import { searchAsset } from "../api/asset";
-import { createIncident } from "../api/incidentRequest";
 import { z } from "zod";
+import { useTheme } from "../context/ThemeContext";
+import AppSidebar from "../components/AppSidebar";
+
+const SIDEBAR_WIDTH = 260;
 
 const schema = z.object({
   categoryId: z.coerce.number().nullable().optional(),
@@ -43,15 +49,20 @@ const schema = z.object({
   issueRaisedOn: z.string().optional(),
 });
 
-export default function IncidentRequestScreen({ theme, navigation, route }) {
-  const colors = theme || darkTheme;
+export default function IncidentRequestScreen({ navigation, route }) {
+  const { isDark, toggleTheme, theme } = useTheme();
+  const colors = theme;
   const asset = route?.params?.asset || null;
 
+  // ─── Reference data ────────────────────────────────────────────────────
   const [categories, setCategories] = useState([]);
   const [locations, setLocations] = useState([]);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
   const [allocations, setAllocations] = useState([]);
+  const [oems, setOems] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [loadingRefData, setLoadingRefData] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -60,20 +71,32 @@ export default function IncidentRequestScreen({ theme, navigation, route }) {
     priority: "Medium",
     subject: "",
     description: "",
+    providerType: "OEM", // "OEM" | "Vendor" — Incident has provider section, no Assigned To (matches web)
+    serviceProviderId: "",
+    serviceProviderName: "",
     requestedByUserId: "",
     requestedByName: "",
     requestedByPhone: "",
     requestedByEmail: "",
     clientId: "",
     locationId: "",
-    assetId: asset?.id || "",
+    assetId: asset?.id || asset?.assetId || "",
     issueRaisedOn: new Date().toISOString().slice(0, 16),
   });
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [userSearch, setUserSearch] = useState("");
-  const [selectedUser, setSelectedUser] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // ─── Asset search modal (fallback when no Raised By user selected) ────
+  const [showAssetSearch, setShowAssetSearch] = useState(false);
+  const [assetSearchText, setAssetSearchText] = useState("");
+  const [assetSearchLoading, setAssetSearchLoading] = useState(false);
+  const [assetSearchResults, setAssetSearchResults] = useState([]);
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
+  const isAnimating = useRef(false);
 
   useEffect(() => {
     loadFormData();
@@ -81,40 +104,150 @@ export default function IncidentRequestScreen({ theme, navigation, route }) {
 
   useEffect(() => {
     if (asset) {
-      setForm((f) => ({ ...f, assetId: asset.id || "" }));
+      setForm((f) => ({ ...f, assetId: asset.id || asset.assetId || "" }));
     }
   }, [asset]);
 
   const loadFormData = async () => {
-    try {
-      const [catRes, locRes, clientRes, userRes, allocRes] = await Promise.all([
-        getCategories("Incident"),
-        getAllLocations(),
-        getAllClients(),
-        searchUsers({employmentStatus: "Active"}),
-        getAllAllocations({ allocationStatus: "Active" }),
-      ]);
-      setCategories(catRes.data || catRes.data?.data || []);
-      setLocations(locRes.data || locRes.data?.data || []);
-      setClients(clientRes.data || clientRes.data?.data || []);
-      setUsers(userRes.data || userRes.data?.data || []);
-      setAllocations(allocRes.data || allocRes.data?.data || []);
-    } catch (err) {
-      console.error("Failed to load form data", err);
+    setLoadingRefData(true);
+    const results = await Promise.allSettled([
+      getCategories("Incident"),
+      getAllLocations(),
+      getAllClients(),
+      searchUsers({ employmentStatus: "Active" }),
+      getAllAllocations({ allocationStatus: "Active" }),
+      getAllOems(),
+      getAllVendors(),
+    ]);
+
+    const [catRes, locRes, clientRes, userRes, allocRes, oemRes, vendorRes] = results;
+
+    // Unwraps a settled result, checking BOTH layers:
+    // 1. catRes.status — did the HTTP call itself resolve? ("fulfilled"/"rejected", from Promise.allSettled)
+    // 2. body.success — did the backend's own business logic succeed? (from your ApiResponse<T> shape)
+    const unwrap = (res, label) => {
+      if (res.status !== "fulfilled") {
+        console.error(`${label} request failed:`, res.reason?.message || res.reason);
+        return [];
+      }
+      const body = res.value?.data; // ApiResponse<T> = { success, message, data }
+      if (body && body.success === false) {
+        console.error(`${label} backend reported failure:`, body.message);
+        return [];
+      }
+      return body?.data ?? body ?? [];
+    };
+
+    setCategories(unwrap(catRes, "getCategories"));
+    setLocations(unwrap(locRes, "getAllLocations"));
+    setClients(unwrap(clientRes, "getAllClients"));
+    setUsers(unwrap(userRes, "searchUsers"));
+    setAllocations(unwrap(allocRes, "getAllAllocations"));
+    setOems(unwrap(oemRes, "getAllOems"));
+    setVendors(unwrap(vendorRes, "getAllVendors"));
+
+    setLoadingRefData(false);
+  };
+
+  // ─── Auto-fill priority from category default ──────────────────────────
+  useEffect(() => {
+    if (!form.categoryId) return;
+    const cat = categories.find((c) => String(c.categoryId) === String(form.categoryId));
+    if (cat?.defaultPriority) {
+      setForm((f) => ({ ...f, priority: cat.defaultPriority }));
+    }
+  }, [form.categoryId, categories]);
+
+  // ─── Assets currently allocated to the selected "Raised By" user ──────
+  const userAssets = useMemo(() => {
+    if (!form.requestedByUserId) return [];
+    const uid = Number(form.requestedByUserId);
+    const seen = new Set();
+    return allocations
+      .filter((a) => Number(a.allocatedToUserId) === uid && a.assetId)
+      .filter((a) => {
+        if (seen.has(a.assetId)) return false;
+        seen.add(a.assetId);
+        return true;
+      })
+      .map((a) => ({ assetId: a.assetId, assetCode: a.assetCode, assetName: a.assetName }));
+  }, [allocations, form.requestedByUserId]);
+
+  const updateForm = (key, value) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    if (errors[key]) {
+      setErrors((e) => {
+        const next = { ...e };
+        delete next[key];
+        return next;
+      });
     }
   };
 
   const handleUserSelect = (user) => {
-    setSelectedUser(user);
     setForm((f) => ({
       ...f,
       requestedByUserId: user.userId || user.id || "",
       requestedByName: user.fullName || user.name || "",
       requestedByPhone: user.phone || "",
       requestedByEmail: user.companyEmail || user.email || "",
+      assetId: "", // reset asset when requester changes, same as web
     }));
+
+    // Auto-fill client/location/asset from this user's first active allocation
+    const uid = Number(user.userId || user.id);
+    const userAllocs = allocations.filter((a) => Number(a.allocatedToUserId) === uid);
+    if (userAllocs.length > 0) {
+      setForm((f) => ({
+        ...f,
+        clientId: userAllocs[0].clientId || f.clientId,
+        locationId: userAllocs[0].locationId || f.locationId,
+        assetId: userAllocs[0].assetId || f.assetId,
+      }));
+    }
+
     setShowUserModal(false);
     setUserSearch("");
+  };
+
+  // ─── Service provider (OEM/Vendor) selection ───────────────────────────
+  const providerOptions = form.providerType === "OEM" ? oems : vendors;
+
+  const handleProviderTypeChange = (val) => {
+    setForm((f) => ({ ...f, providerType: val, serviceProviderId: "", serviceProviderName: "" }));
+  };
+
+  const handleProviderSelect = (id) => {
+    const list = form.providerType === "OEM" ? oems : vendors;
+    const found = list.find((p) => String(p.oemId || p.vendorId) === String(id));
+    const name = form.providerType === "OEM" ? found?.oemName : found?.vendorName;
+    setForm((f) => ({ ...f, serviceProviderId: id, serviceProviderName: name || "" }));
+  };
+
+  // ─── Asset search (fallback, when no "Raised By" user is selected) ────
+  const runAssetSearch = async (text) => {
+    setAssetSearchText(text);
+    if (!text.trim()) {
+      setAssetSearchResults([]);
+      return;
+    }
+    setAssetSearchLoading(true);
+    try {
+      const res = await searchAsset(text.trim());
+      const list = Array.isArray(res?.data) ? res.data : res?.data?.data ?? (res ? [res] : []);
+      setAssetSearchResults(Array.isArray(list) ? list : [list].filter(Boolean));
+    } catch (err) {
+      setAssetSearchResults([]);
+    } finally {
+      setAssetSearchLoading(false);
+    }
+  };
+
+  const selectSearchedAsset = (a) => {
+    updateForm("assetId", a.assetId || a.id);
+    setShowAssetSearch(false);
+    setAssetSearchText("");
+    setAssetSearchResults([]);
   };
 
   const validate = () => {
@@ -140,11 +273,12 @@ export default function IncidentRequestScreen({ theme, navigation, route }) {
     setLoading(true);
     try {
       const payload = {
-        requestType: "Incident",
         categoryId: form.categoryId ? Number(form.categoryId) : null,
         priority: form.priority,
         subject: form.subject,
         description: form.description || undefined,
+        serviceProviderId: form.serviceProviderId ? Number(form.serviceProviderId) : null,
+        serviceProviderName: form.serviceProviderName || undefined,
         requestedByUserId: form.requestedByUserId ? Number(form.requestedByUserId) : null,
         requestedByName: form.requestedByName,
         requestedByPhone: form.requestedByPhone || undefined,
@@ -154,7 +288,7 @@ export default function IncidentRequestScreen({ theme, navigation, route }) {
         assetId: form.assetId ? Number(form.assetId) : null,
         issueRaisedOn: form.issueRaisedOn || undefined,
       };
-      await createIncident(payload);
+      await createIncidentRequest(payload);
       Alert.alert("Success", "Incident request created.", [
         { text: "OK", onPress: () => navigation.goBack() },
       ]);
@@ -165,245 +299,334 @@ export default function IncidentRequestScreen({ theme, navigation, route }) {
     }
   };
 
-  const updateForm = (key, value) => {
-    setForm((f) => ({ ...f, [key]: value }));
-    if (errors[key]) {
-      setErrors((e) => {
-        const next = { ...e };
-        delete next[key];
-        return next;
-      });
-    }
+  const toggleSidebar = () => {
+    if (isAnimating.current) return;
+    const toValue = sidebarOpen ? -SIDEBAR_WIDTH : 0;
+    isAnimating.current = true;
+    Animated.timing(slideAnim, {
+      toValue,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setSidebarOpen(!sidebarOpen);
+      isAnimating.current = false;
+    });
+  };
+
+  const closeSidebar = () => {
+    if (isAnimating.current) return;
+    if (!sidebarOpen) return;
+    isAnimating.current = true;
+    Animated.timing(slideAnim, {
+      toValue: -SIDEBAR_WIDTH,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setSidebarOpen(false);
+      isAnimating.current = false;
+    });
   };
 
   return (
-    <ScrollView style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.collapseButton}>
-          <Ionicons name="menu" size={24} color={colors.accentBlue} />
-        </TouchableOpacity>
-        <View style={styles.headerText}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Incident Request</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Report an incident for the scanned asset.
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <ScrollView style={{ flex: 1 }}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={toggleSidebar} style={styles.collapseButton}>
+            <Ionicons name="menu" size={24} color={colors.accentBlue} />
+          </TouchableOpacity>
+          <View style={styles.headerText}>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>Incident Request</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              Report an incident for the scanned asset.
+            </Text>
+          </View>
+        </View>
+
+        {/* <View style={[styles.slaBanner, { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.25)" }]}>
+          <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
+          <Text style={[styles.slaText, { color: "#EF4444" }]}>
+            <Text style={{ fontWeight: "700" }}>SLA clock starts immediately.</Text> Issue raised date/time is auto-set to now. Response and resolution deadlines are calculated based on priority.
           </Text>
+        </View> */}
+
+        {/* Request Details */}
+        <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Request Details</Text>
+
+          <View style={styles.row}>
+            <View style={styles.fieldHalf}>
+              <Text style={[styles.label, { color: colors.textMuted }]}>CATEGORY</Text>
+              <View style={[styles.pickerWrap, { borderColor: errors.categoryId ? "#EF4444" : colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+                <Picker
+                  selectedValue={form.categoryId}
+                  onValueChange={(val) => updateForm("categoryId", val)}
+                  style={{ color: colors.textPrimary }}
+                  dropdownIconColor={colors.textPrimary}
+                >
+                  <Picker.Item label="— Select Category —" value="" />
+                  {categories.map((c) => (
+                    <Picker.Item key={c.categoryId} label={c.categoryName} value={String(c.categoryId)} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+            <View style={styles.fieldHalf}>
+              <Text style={[styles.label, { color: colors.textMuted }]}>PRIORITY *</Text>
+              <View style={[styles.pickerWrap, { borderColor: errors.priority ? "#EF4444" : colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+                <Picker
+                  selectedValue={form.priority}
+                  onValueChange={(val) => updateForm("priority", val)}
+                  style={{ color: colors.textPrimary }}
+                  dropdownIconColor={colors.textPrimary}
+                >
+                  <Picker.Item label="— Select Priority —" value="" />
+                  {["Critical", "High", "Medium", "Low"].map((p) => (
+                    <Picker.Item key={p} label={p} value={p} />
+                  ))}
+                </Picker>
+              </View>
+              {errors.priority && <Text style={styles.errorText}>{errors.priority}</Text>}
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={styles.fieldHalf}>
+              <Text style={[styles.label, { color: colors.textMuted }]}>ISSUE RAISED ON</Text>
+              <TouchableOpacity
+                style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground, justifyContent: "center" }]}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text style={{ color: colors.textPrimary, padding: 12 }}>
+                  {form.issueRaisedOn ? form.issueRaisedOn.replace("T", " ") : "Select date/time"}
+                </Text>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={new Date(form.issueRaisedOn || Date.now())}
+                  mode="datetime"
+                  display="default"
+                  onChange={(event, date) => {
+                    setShowDatePicker(false);
+                    if (date) {
+                      const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+                        .toISOString()
+                        .slice(0, 16);
+                      updateForm("issueRaisedOn", local);
+                    }
+                  }}
+                />
+              )}
+            </View>
+            <View style={styles.fieldHalf} />
+          </View>
+
+          <Text style={[styles.label, { color: colors.textMuted }]}>SUBJECT / TITLE *</Text>
+          <InputField
+            placeholder="e.g. Printer not working at Ajmer Depot"
+            value={form.subject}
+            onChangeText={(val) => updateForm("subject", val)}
+            theme={colors}
+          />
+          {errors.subject && <Text style={styles.errorText}>{errors.subject}</Text>}
+
+          <Text style={[styles.label, { color: colors.textMuted }]}>DESCRIPTION</Text>
+          <View style={[styles.textareaContainer, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+            <TextInput
+              style={[styles.textarea, { color: colors.textPrimary }]}
+              placeholder="Detailed description of the issue or request..."
+              placeholderTextColor={colors.placeholder}
+              value={form.description}
+              onChangeText={(val) => updateForm("description", val)}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
         </View>
-      </View>
 
-      <View style={[styles.slaBanner, { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.25)" }]}>
-        <Ionicons name="alert-triangle" size={16} color="#EF4444" />
-        <Text style={[styles.slaText, { color: "#EF4444" }]}>
-          <Text style={{ fontWeight: "700" }}>SLA clock starts immediately.</Text> Issue raised date/time is auto-set to now. Response and resolution deadlines are calculated based on priority.
-        </Text>
-      </View>
+        {/* Service Provider — same as web: Incident shows Provider Type + Provider, but NOT Assigned To */}
+        <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Service Provider</Text>
 
-      <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Request Details</Text>
+          <View style={styles.row}>
+            <View style={styles.fieldHalf}>
+              <Text style={[styles.label, { color: colors.textMuted }]}>PROVIDER TYPE</Text>
+              <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+                <Picker
+                  selectedValue={form.providerType}
+                  onValueChange={handleProviderTypeChange}
+                  style={{ color: colors.textPrimary }}
+                  dropdownIconColor={colors.textPrimary}
+                >
+                  <Picker.Item label="OEM" value="OEM" />
+                  <Picker.Item label="Vendor" value="Vendor" />
+                </Picker>
+              </View>
+            </View>
+            <View style={styles.fieldHalf}>
+              <Text style={[styles.label, { color: colors.textMuted }]}>
+                {form.providerType === "OEM" ? "OEM" : "VENDOR"}
+              </Text>
+              <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+                <Picker
+                  selectedValue={form.serviceProviderId}
+                  onValueChange={handleProviderSelect}
+                  style={{ color: colors.textPrimary }}
+                  dropdownIconColor={colors.textPrimary}
+                >
+                  <Picker.Item label="— Select —" value="" />
+                  {providerOptions.map((p) => (
+                    <Picker.Item
+                      key={p.oemId || p.vendorId}
+                      label={p.oemName || p.vendorName}
+                      value={String(p.oemId || p.vendorId)}
+                    />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+          </View>
+        </View>
 
-        <View style={styles.row}>
-          <View style={styles.fieldHalf}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>CATEGORY</Text>
-            <View style={[styles.pickerWrap, { borderColor: errors.categoryId ? "#EF4444" : colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+        {/* Raised By / Location */}
+        <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Raised By / Location</Text>
+
+          <TouchableOpacity
+            style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground, marginBottom: spacing.sm }]}
+            onPress={() => setShowUserModal(true)}
+          >
+            <Text style={{ color: form.requestedByUserId ? colors.textPrimary : colors.placeholder, padding: 12 }}>
+              {form.requestedByName ? form.requestedByName : "Search user by name or employee code…"}
+            </Text>
+          </TouchableOpacity>
+          {errors.requestedByUserId && <Text style={styles.errorText}>{errors.requestedByUserId}</Text>}
+
+          <View style={styles.row}>
+            <View style={styles.fieldHalf}>
+              <Text style={[styles.label, { color: colors.textMuted }]}>NAME *</Text>
+              <InputField
+                placeholder="Requester name"
+                value={form.requestedByName}
+                onChangeText={(val) => updateForm("requestedByName", val)}
+                theme={colors}
+              />
+              {errors.requestedByName && <Text style={styles.errorText}>{errors.requestedByName}</Text>}
+            </View>
+            <View style={styles.fieldHalf}>
+              <Text style={[styles.label, { color: colors.textMuted }]}>PHONE</Text>
+              <InputField
+                placeholder="Phone number"
+                value={form.requestedByPhone}
+                onChangeText={(val) => updateForm("requestedByPhone", val)}
+                theme={colors}
+                keyboardType="phone-pad"
+              />
+            </View>
+          </View>
+
+          <Text style={[styles.label, { color: colors.textMuted }]}>EMAIL</Text>
+          <InputField
+            placeholder="Email address"
+            value={form.requestedByEmail}
+            onChangeText={(val) => updateForm("requestedByEmail", val)}
+            theme={colors}
+            keyboardType="email-address"
+          />
+
+          <View style={styles.row}>
+            <View style={styles.fieldHalf}>
+              <Text style={[styles.label, { color: colors.textMuted }]}>CLIENT</Text>
+              <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+                <Picker
+                  selectedValue={form.clientId}
+                  onValueChange={(val) => updateForm("clientId", val)}
+                  style={{ color: colors.textPrimary }}
+                  dropdownIconColor={colors.textPrimary}
+                >
+                  <Picker.Item label="— Select Client —" value="" />
+                  {clients.map((c) => (
+                    <Picker.Item key={c.clientId} label={c.clientName} value={String(c.clientId)} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+            <View style={styles.fieldHalf}>
+              <Text style={[styles.label, { color: colors.textMuted }]}>LOCATION</Text>
+              <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+                <Picker
+                  selectedValue={form.locationId}
+                  onValueChange={(val) => updateForm("locationId", val)}
+                  style={{ color: colors.textPrimary }}
+                  dropdownIconColor={colors.textPrimary}
+                >
+                  <Picker.Item label="— Select Location —" value="" />
+                  {locations.map((l) => (
+                    <Picker.Item key={l.locationId} label={l.locationName} value={String(l.locationId)} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Affected Asset — same conditional pattern as web: allocation dropdown if a
+            Raised By user is selected, otherwise a free asset search */}
+        <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Affected Asset (optional)</Text>
+
+          {form.requestedByUserId ? (
+            <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
               <Picker
-                selectedValue={form.categoryId}
-                onValueChange={(val) => updateForm("categoryId", val)}
+                selectedValue={form.assetId}
+                onValueChange={(val) => updateForm("assetId", val)}
                 style={{ color: colors.textPrimary }}
                 dropdownIconColor={colors.textPrimary}
               >
-                <Picker.Item label="— Select Category —" value="" />
-                {categories.map((c) => (
-                  <Picker.Item key={c.categoryId} label={c.categoryName} value={String(c.categoryId)} />
+                <Picker.Item
+                  label={userAssets.length ? "— Select Asset —" : "— No assets allocated to this user —"}
+                  value=""
+                />
+                {userAssets.map((a) => (
+                  <Picker.Item
+                    key={a.assetId}
+                    label={a.assetName ? `${a.assetCode} — ${a.assetName}` : a.assetCode}
+                    value={String(a.assetId)}
+                  />
                 ))}
               </Picker>
             </View>
-          </View>
-          <View style={styles.fieldHalf}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>PRIORITY *</Text>
-            <View style={[styles.pickerWrap, { borderColor: errors.priority ? "#EF4444" : colors.inputBorder, backgroundColor: colors.inputBackground }]}>
-              <Picker
-                selectedValue={form.priority}
-                onValueChange={(val) => updateForm("priority", val)}
-                style={{ color: colors.textPrimary }}
-                dropdownIconColor={colors.textPrimary}
-              >
-                <Picker.Item label="— Select Priority —" value="" />
-                {["Critical", "High", "Medium", "Low"].map((p) => (
-                  <Picker.Item key={p} label={p} value={p} />
-                ))}
-              </Picker>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.row}>
-          <View style={styles.fieldHalf}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>ISSUE RAISED ON</Text>
+          ) : (
             <TouchableOpacity
-              style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground, justifyContent: "center" }]}
-              onPress={() => setShowDatePicker(true)}
+              style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}
+              onPress={() => setShowAssetSearch(true)}
             >
-              <Text style={{ color: colors.textPrimary, padding: 12 }}>
-                {form.issueRaisedOn ? form.issueRaisedOn.replace("T", " ") : "Select date/time"}
+              <Text style={{ color: form.assetId ? colors.textPrimary : colors.placeholder, padding: 12 }}>
+                {form.assetId
+                  ? (asset ? asset.assetCode || asset.code || `#${form.assetId}` : `#${form.assetId}`)
+                  : "Search asset by code…"}
               </Text>
             </TouchableOpacity>
-            {showDatePicker && (
-              <DateTimePicker
-                value={new Date(form.issueRaisedOn || Date.now())}
-                mode="datetime"
-                display="default"
-                onChange={(event, date) => {
-                  setShowDatePicker(false);
-                  if (date) {
-                    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-                      .toISOString()
-                      .slice(0, 16);
-                    updateForm("issueRaisedOn", local);
-                  }
-                }}
-              />
-            )}
-          </View>
-          <View style={styles.fieldHalf} />
+          )}
         </View>
 
-        <Text style={[styles.label, { color: colors.textMuted }]}>SUBJECT / TITLE *</Text>
-        <InputField
-          placeholder="e.g. Printer not working at Ajmer Depot"
-          value={form.subject}
-          onChangeText={(val) => updateForm("subject", val)}
-          theme={colors}
-        />
-        {errors.subject && <Text style={styles.errorText}>{errors.subject}</Text>}
-
-        <Text style={[styles.label, { color: colors.textMuted }]}>DESCRIPTION</Text>
-        <View style={[styles.textareaContainer, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
-          <TextInput
-            style={[styles.textarea, { color: colors.textPrimary }]}
-            placeholder="Detailed description of the issue or request..."
-            placeholderTextColor={colors.placeholder}
-            value={form.description}
-            onChangeText={(val) => updateForm("description", val)}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
+        <View style={styles.footer}>
+          <PrimaryButton
+            title="Submit Request"
+            onPress={handleSubmit}
+            loading={loading}
           />
         </View>
-      </View>
+      </ScrollView>
 
-      <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Raised By / Location</Text>
-
-        <TouchableOpacity
-          style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground, marginBottom: spacing.sm }]}
-          onPress={() => setShowUserModal(true)}
-        >
-          <Text style={{ color: form.requestedByUserId ? colors.textPrimary : colors.placeholder, padding: 12 }}>
-            {selectedUser ? `${selectedUser.fullName || selectedUser.name} (${selectedUser.employeeCode || "User"})` : "Search user by name or employee code…"}
-          </Text>
-        </TouchableOpacity>
-        {errors.requestedByUserId && <Text style={styles.errorText}>{errors.requestedByUserId}</Text>}
-
-        <View style={styles.row}>
-          <View style={styles.fieldHalf}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>NAME *</Text>
-            <InputField
-              placeholder="Requester name"
-              value={form.requestedByName}
-              onChangeText={(val) => updateForm("requestedByName", val)}
-              theme={colors}
-            />
-            {errors.requestedByName && <Text style={styles.errorText}>{errors.requestedByName}</Text>}
-          </View>
-          <View style={styles.fieldHalf}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>PHONE</Text>
-            <InputField
-              placeholder="Phone number"
-              value={form.requestedByPhone}
-              onChangeText={(val) => updateForm("requestedByPhone", val)}
-              theme={colors}
-              keyboardType="phone-pad"
-            />
-          </View>
-        </View>
-
-        <Text style={[styles.label, { color: colors.textMuted }]}>EMAIL</Text>
-        <InputField
-          placeholder="Email address"
-          value={form.requestedByEmail}
-          onChangeText={(val) => updateForm("requestedByEmail", val)}
-          theme={colors}
-          keyboardType="email-address"
-        />
-
-        <View style={styles.row}>
-          <View style={styles.fieldHalf}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>CLIENT</Text>
-            <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
-              <Picker
-                selectedValue={form.clientId}
-                onValueChange={(val) => updateForm("clientId", val)}
-                style={{ color: colors.textPrimary }}
-                dropdownIconColor={colors.textPrimary}
-              >
-                <Picker.Item label="— Select Client —" value="" />
-                {clients.map((c) => (
-                  <Picker.Item key={c.clientId} label={c.clientName} value={String(c.clientId)} />
-                ))}
-              </Picker>
-            </View>
-          </View>
-          <View style={styles.fieldHalf}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>LOCATION</Text>
-            <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
-              <Picker
-                selectedValue={form.locationId}
-                onValueChange={(val) => updateForm("locationId", val)}
-                style={{ color: colors.textPrimary }}
-                dropdownIconColor={colors.textPrimary}
-              >
-                <Picker.Item label="— Select Location —" value="" />
-                {locations.map((l) => (
-                  <Picker.Item key={l.locationId} label={l.locationName} value={String(l.locationId)} />
-                ))}
-              </Picker>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Asset Information</Text>
-        <InputField
-          icon="cube-outline"
-          placeholder="Asset"
-          value={
-            asset
-              ? asset.assetCode || asset.code || asset.name || `#${asset.id}`
-              : form.assetId
-                ? `#${form.assetId}`
-                : ""
-          }
-          onChangeText={() => {}}
-          editable={false}
-          theme={colors}
-        />
-      </View>
-
-      <View style={styles.footer}>
-        <PrimaryButton
-          title="Submit Request"
-          onPress={handleSubmit}
-          loading={loading}
-        />
-      </View>
-
+      {/* User picker modal */}
       <Modal visible={showUserModal} animationType="slide" transparent>
         <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.7)" }]}>
           <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Select User</Text>
               <TouchableOpacity onPress={() => { setShowUserModal(false); setUserSearch(""); }}>
-                <Text style={{ color: colors.textPrimary, fontSize: 18 }}>✕</Text>
+                <Ionicons name="close" size={22} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
             <InputField
@@ -436,14 +659,77 @@ export default function IncidentRequestScreen({ theme, navigation, route }) {
               )}
               ListEmptyComponent={
                 <Text style={{ color: colors.textMuted, textAlign: "center", marginVertical: spacing.md }}>
-                  No users found
+                  {loadingRefData ? "Loading users…" : "No users found"}
                 </Text>
               }
             />
           </View>
         </View>
       </Modal>
-    </ScrollView>
+
+      {/* Asset search modal (fallback when no Raised By user set) */}
+      <Modal visible={showAssetSearch} animationType="slide" transparent>
+        <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.7)" }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Search Asset</Text>
+              <TouchableOpacity onPress={() => { setShowAssetSearch(false); setAssetSearchText(""); setAssetSearchResults([]); }}>
+                <Ionicons name="close" size={22} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <InputField
+              placeholder="Asset code or QR data..."
+              value={assetSearchText}
+              onChangeText={runAssetSearch}
+              theme={colors}
+            />
+            <FlatList
+              data={assetSearchResults}
+              keyExtractor={(item, idx) => String(item.assetId || item.id || idx)}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.userItem, { borderBottomColor: colors.cardBorder }]}
+                  onPress={() => selectSearchedAsset(item)}
+                >
+                  <Text style={{ color: colors.textPrimary, fontFamily: typography.fontBodySemiBold }}>
+                    {item.assetCode || item.code || `#${item.assetId || item.id}`}
+                  </Text>
+                  {!!item.assetName && (
+                    <Text style={{ color: colors.textSecondary, fontFamily: typography.fontBody, fontSize: typography.small }}>
+                      {item.assetName}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <Text style={{ color: colors.textMuted, textAlign: "center", marginVertical: spacing.md }}>
+                  {assetSearchLoading ? "Searching…" : "Type to search for an asset"}
+                </Text>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {sidebarOpen && (
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={closeSidebar} />
+      )}
+      <AppSidebar
+        colors={colors}
+        sidebarOpen={sidebarOpen}
+        slideAnim={slideAnim}
+        isAnimating={isAnimating}
+        toggleSidebar={toggleSidebar}
+        closeSidebar={closeSidebar}
+        navigation={navigation}
+        route={route}
+        username={route?.params?.user?.name || route?.params?.user?.email || "User"}
+        roleName={route?.params?.user?.roleName || route?.params?.user?.role || "User"}
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+        contextTheme={theme}
+      />
+    </View>
   );
 }
 
@@ -500,7 +786,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontFamily: typography.fontHeading,
-    fontSize: typography.h3,
+    fontSize: typography.h2,
     fontWeight: "700",
     marginBottom: spacing.md,
   },
@@ -572,5 +858,14 @@ const styles = StyleSheet.create({
   userItem: {
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
+  },
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    zIndex: 10,
   },
 });

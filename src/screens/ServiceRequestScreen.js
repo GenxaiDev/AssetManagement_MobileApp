@@ -1,10 +1,9 @@
-import { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, TextInput, Modal, FlatList } from "react-native";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, TextInput, Modal, FlatList, Animated } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
-import { darkTheme, lightTheme } from "../theme/colors";
-import { spacing, radius, typography } from "../theme/colors";
+import { spacing, radius, typography, darkTheme } from "../theme/colors";
 import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
 import {
@@ -13,11 +12,16 @@ import {
   getAllClients,
   searchUsers,
   getAllAllocations,
+  getAllOems,
+  getAllVendors,
+  createServiceRequest,
 } from "../api/request";
 import { searchAsset } from "../api/asset";
-import { createServiceRequest } from "../api/serviceRequest";
 import { z } from "zod";
 import { useTheme } from "../context/ThemeContext";
+import AppSidebar from "../components/AppSidebar";
+
+const SIDEBAR_WIDTH = 260;
 
 const schema = z.object({
   categoryId: z.coerce.number().nullable().optional(),
@@ -25,6 +29,11 @@ const schema = z.object({
   maintenanceType: z.string().optional(),
   subject: z.string().min(1, "Subject is required"),
   description: z.string().optional(),
+  providerType: z.enum(["OEM", "Vendor"]).optional(),
+  serviceProviderId: z.coerce.number().nullable().optional(),
+  serviceProviderName: z.string().optional(),
+  assignedToUserId: z.coerce.number().nullable().optional(),
+  assignedToName: z.string().optional(),
   requestedByUserId: z.coerce.number().nullable().optional(),
   requestedByName: z.string().min(1, "Requester name is required"),
   requestedByPhone: z.string().optional(),
@@ -44,9 +53,11 @@ const schema = z.object({
 });
 
 export default function ServiceRequestScreen({ theme, navigation, route }) {
-  const colors = theme || darkTheme;
+  const { isDark, toggleTheme, theme: contextTheme } = useTheme();
+  const colors = contextTheme || darkTheme;
   const asset = route?.params?.asset || null;
 
+  // ─── Reference data ────────────────────────────────────────────────────
   const [categories, setCategories] = useState([]);
   const [locations, setLocations] = useState([]);
   const [clients, setClients] = useState([]);
@@ -54,92 +65,256 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
   const [allocations, setAllocations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [oems, setOems] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [loadingRefData, setLoadingRefData] = useState(true);
 
+  // ─── Form state ────────────────────────────────────────────────────────
   const [form, setForm] = useState({
     categoryId: "",
     priority: "Medium",
     maintenanceType: "",
     subject: "",
     description: "",
+    providerType: "OEM", // "OEM" | "Vendor"
+    serviceProviderId: "",
+    serviceProviderName: "",
+    assignedToUserId: "",
+    assignedToName: "",
     requestedByUserId: "",
     requestedByName: "",
     requestedByPhone: "",
     requestedByEmail: "",
     clientId: "",
     locationId: "",
-    assetId: asset?.id || "",
+    assetId: asset?.id || asset?.assetId || "",
     issueRaisedOn: new Date().toISOString().slice(0, 16),
   });
 
-  const [showUserModal, setShowUserModal] = useState(false);
+  // ─── User picker modal (shared between Raised By / Assigned To) ───────
+  const [userModalTarget, setUserModalTarget] = useState(null); // "requestedBy" | "assignedTo" | null
   const [userSearch, setUserSearch] = useState("");
-  const [selectedUser, setSelectedUser] = useState(null);
+
+  // ─── Asset search modal (fallback when no Raised By user selected) ────
+  const [showAssetSearch, setShowAssetSearch] = useState(false);
+  const [assetSearchText, setAssetSearchText] = useState("");
+  const [assetSearchLoading, setAssetSearchLoading] = useState(false);
+  const [assetSearchResults, setAssetSearchResults] = useState([]);
+
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
+  const isAnimating = useRef(false);
+
+  // ─── Load all reference data in parallel, but independently ────────────
   useEffect(() => {
     loadFormData();
   }, []);
 
   useEffect(() => {
     if (asset) {
-      setForm((f) => ({ ...f, assetId: asset.id || "" }));
+      setForm((f) => ({ ...f, assetId: asset.assetId || "" }));
     }
   }, [asset]);
 
   const loadFormData = async () => {
-    try {
-      const [catRes, locRes, clientRes, userRes, allocRes] = await Promise.all([
-        getCategories("Service"),
-        getAllLocations(),
-        getAllClients(),
-        searchUsers(),
-        getAllAllocations({ allocationStatus: "Active" }),
-      ]);
-      setCategories(catRes.data || catRes.data?.data || []);
-      setLocations(locRes.data || locRes.data?.data || []);
-      setClients(clientRes.data || clientRes.data?.data || []);
-      setUsers(userRes.data || userRes.data?.data || userRes.data || []);
-      setAllocations(allocRes.data || allocRes.data?.data || []);
-    } catch (err) {
-      console.error("Failed to load form data", err);
+    setLoadingRefData(true);
+    const results = await Promise.allSettled([
+      getCategories("Service"),
+      getAllLocations(),
+      getAllClients(),
+      searchUsers({ employmentStatus: "Active" }),
+      getAllAllocations({ allocationStatus: "Active" }),
+      getAllOems(),
+      getAllVendors(),
+    ]);
+
+    const [catRes, locRes, clientRes, userRes, allocRes, oemRes, vendorRes] = results;
+
+    const unwrap = (res) => {
+      if (res.status !== "fulfilled") return [];
+      const body = res.value?.data;
+      return body?.data ?? body ?? [];
+    };
+
+    if (catRes.status === "fulfilled") setCategories(unwrap(catRes));
+    else console.error("getCategories failed:", catRes.reason?.message);
+
+    if (locRes.status === "fulfilled") setLocations(unwrap(locRes));
+    else console.error("getAllLocations failed:", locRes.reason?.message);
+
+    if (clientRes.status === "fulfilled") setClients(unwrap(clientRes));
+    else console.error("getAllClients failed:", clientRes.reason?.message);
+
+    if (userRes.status === "fulfilled") setUsers(unwrap(userRes));
+    else console.error("searchUsers failed:", userRes.reason?.message);
+
+    if (allocRes.status === "fulfilled") setAllocations(unwrap(allocRes));
+    else console.error("getAllAllocations failed:", allocRes.reason?.message);
+
+    if (oemRes.status === "fulfilled") setOems(unwrap(oemRes));
+    else console.error("getAllOems failed:", oemRes.reason?.message);
+
+    if (vendorRes.status === "fulfilled") setVendors(unwrap(vendorRes));
+    else console.error("getAllVendors failed:", vendorRes.reason?.message);
+
+    setLoadingRefData(false);
+  };
+
+  // ─── Auto-fill priority from category default ──────────────────────────
+  useEffect(() => {
+    if (!form.categoryId) return;
+    const cat = categories.find((c) => String(c.categoryId) === String(form.categoryId));
+    if (cat?.defaultPriority) {
+      setForm((f) => ({ ...f, priority: cat.defaultPriority }));
+    }
+  }, [form.categoryId, categories]);
+
+  // ─── Assets currently allocated to the selected "Raised By" user ──────
+  const userAssets = useMemo(() => {
+    if (!form.requestedByUserId) return [];
+    const uid = Number(form.requestedByUserId);
+    const seen = new Set();
+    return allocations
+      .filter((a) => Number(a.allocatedToUserId) === uid && a.assetId)
+      .filter((a) => {
+        if (seen.has(a.assetId)) return false;
+        seen.add(a.assetId);
+        return true;
+      })
+      .map((a) => ({ assetId: a.assetId, assetCode: a.assetCode, assetName: a.assetName }));
+  }, [allocations, form.requestedByUserId]);
+
+  const updateForm = (key, value) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    if (errors[key]) {
+      setErrors((e) => {
+        const next = { ...e };
+        delete next[key];
+        return next;
+      });
     }
   };
 
-  const handleUserSelect = (user) => {
-    setSelectedUser(user);
-    setForm((f) => ({
-      ...f,
-      requestedByUserId: user.userId || user.id || "",
-      requestedByName: user.fullName || user.name || "",
-      requestedByPhone: user.phone || "",
-      requestedByEmail: user.companyEmail || user.email || "",
-    }));
-    setShowUserModal(false);
+  // ─── User picker logic ──────────────────────────────────────────────────
+  const openUserModal = (target) => {
+    setUserModalTarget(target);
     setUserSearch("");
   };
 
-  const userAssets = selectedUser
-    ? allocations
-        .filter((a) => Number(a.allocatedToUserId) === Number(selectedUser.userId || selectedUser.id) && a.assetId)
-        .filter((a, i, self) => i === self.findIndex((x) => x.assetId === a.assetId))
-        .map((a) => ({ assetId: a.assetId, assetCode: a.assetCode, assetName: a.assetName }))
-    : [];
+  const handleUserSelect = (user) => {
+    if (userModalTarget === "requestedBy") {
+      setForm((f) => ({
+        ...f,
+        requestedByUserId: user.userId || user.id || "",
+        requestedByName: user.fullName || user.name || "",
+        requestedByPhone: user.phone || "",
+        requestedByEmail: user.companyEmail || user.email || "",
+        assetId: "", // reset asset when requester changes, same as web
+      }));
 
-  const validate = () => {
-    try {
-      schema.parse(form);
-      setErrors({});
-      return true;
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        const newErrors = {};
-        err.errors.forEach((e) => {
-          newErrors[e.path[0]] = e.message;
-        });
-        setErrors(newErrors);
+      // Auto-fill client/location/asset from this user's first active allocation
+      const uid = Number(user.userId || user.id);
+      const userAllocs = allocations.filter((a) => Number(a.allocatedToUserId) === uid);
+      if (userAllocs.length > 0) {
+        setForm((f) => ({
+          ...f,
+          clientId: userAllocs[0].clientId || f.clientId,
+          locationId: userAllocs[0].locationId || f.locationId,
+          assetId: userAllocs[0].assetId || f.assetId,
+        }));
       }
-      return false;
+    } else if (userModalTarget === "assignedTo") {
+      setForm((f) => ({
+        ...f,
+        assignedToUserId: user.userId || user.id || "",
+        assignedToName: user.fullName || user.name || "",
+      }));
     }
+    setUserModalTarget(null);
+    setUserSearch("");
+  };
+
+  // ─── Service provider (OEM/Vendor) selection ───────────────────────────
+  const providerOptions = form.providerType === "OEM" ? oems : vendors;
+
+  const handleProviderTypeChange = (val) => {
+    setForm((f) => ({ ...f, providerType: val, serviceProviderId: "", serviceProviderName: "" }));
+  };
+
+  const handleProviderSelect = (id) => {
+    const list = form.providerType === "OEM" ? oems : vendors;
+    const found = list.find((p) => String(p.oemId || p.vendorId) === String(id));
+    const name = form.providerType === "OEM" ? found?.oemName : found?.vendorName;
+    setForm((f) => ({ ...f, serviceProviderId: id, serviceProviderName: name || "" }));
+  };
+
+  // ─── Asset search (fallback, when no "Raised By" user is selected) ────
+  const runAssetSearch = async (text) => {
+    setAssetSearchText(text);
+    if (!text.trim()) {
+      setAssetSearchResults([]);
+      return;
+    }
+    setAssetSearchLoading(true);
+    try {
+      const res = await searchAsset(text.trim());
+      const list = Array.isArray(res?.data) ? res.data : res?.data?.data ?? (res ? [res] : []);
+      setAssetSearchResults(Array.isArray(list) ? list : [list].filter(Boolean));
+    } catch (err) {
+      setAssetSearchResults([]);
+    } finally {
+      setAssetSearchLoading(false);
+    }
+  };
+
+  const selectSearchedAsset = (a) => {
+    updateForm("assetId", a.assetId || a.id);
+    setShowAssetSearch(false);
+    setAssetSearchText("");
+    setAssetSearchResults([]);
+  };
+
+  const toggleSidebar = () => {
+    if (isAnimating.current) return;
+    const toValue = sidebarOpen ? -SIDEBAR_WIDTH : 0;
+    isAnimating.current = true;
+    Animated.timing(slideAnim, {
+      toValue,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setSidebarOpen(!sidebarOpen);
+      isAnimating.current = false;
+    });
+  };
+
+  const closeSidebar = () => {
+    if (isAnimating.current) return;
+    if (!sidebarOpen) return;
+    isAnimating.current = true;
+    Animated.timing(slideAnim, {
+      toValue: -SIDEBAR_WIDTH,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setSidebarOpen(false);
+      isAnimating.current = false;
+    });
+  };
+
+  // ─── Validation (lightweight, mirrors the web zod schema's key rules) ──
+  const validate = () => {
+    const newErrors = {};
+    if (!form.priority) newErrors.priority = "Priority is required";
+    if (!form.subject.trim()) newErrors.subject = "Subject is required";
+    if (!form.requestedByName.trim()) newErrors.requestedByName = "Requester name is required";
+    if (form.maintenanceType && !form.assetId) {
+      newErrors.assetId = "Affected Asset is required when Type is selected";
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
@@ -154,6 +329,9 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
         maintenanceType: form.maintenanceType || undefined,
         subject: form.subject,
         description: form.description || undefined,
+        serviceProviderId: form.serviceProviderId ? Number(form.serviceProviderId) : null,
+        serviceProviderName: form.serviceProviderName || undefined,
+        assignedToUserId: form.assignedToUserId ? Number(form.assignedToUserId) : null,
         requestedByUserId: form.requestedByUserId ? Number(form.requestedByUserId) : null,
         requestedByName: form.requestedByName,
         requestedByPhone: form.requestedByPhone || undefined,
@@ -170,25 +348,15 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
     } catch (err) {
       Alert.alert("Error", err.message || "Failed to create service request.");
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateForm = (key, value) => {
-    setForm((f) => ({ ...f, [key]: value }));
-    if (errors[key]) {
-      setErrors((e) => {
-        const next = { ...e };
-        delete next[key];
-        return next;
-      });
+      setSaving(false);
     }
   };
 
   return (
-    <ScrollView style={[styles.root, { backgroundColor: colors.background }]}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <ScrollView style={{ flex: 1 }}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.collapseButton}>
+        <TouchableOpacity onPress={toggleSidebar} style={styles.collapseButton}>
           <Ionicons name="menu" size={24} color={colors.accentBlue} />
         </TouchableOpacity>
         <View style={styles.headerText}>
@@ -199,13 +367,14 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
         </View>
       </View>
 
+      {/* Request Details */}
       <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Request Details</Text>
 
         <View style={styles.row}>
           <View style={styles.fieldHalf}>
             <Text style={[styles.label, { color: colors.textMuted }]}>CATEGORY</Text>
-            <View style={[styles.pickerWrap, { borderColor: errors.categoryId ? colors.danger : colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+            <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
               <Picker
                 selectedValue={form.categoryId}
                 onValueChange={(val) => updateForm("categoryId", val)}
@@ -308,15 +477,71 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
         </View>
       </View>
 
+      {/* Service Provider */}
+      <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Service Provider</Text>
+
+        <View style={styles.row}>
+          <View style={styles.fieldHalf}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>PROVIDER TYPE</Text>
+            <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+              <Picker
+                selectedValue={form.providerType}
+                onValueChange={handleProviderTypeChange}
+                style={{ color: colors.textPrimary }}
+                dropdownIconColor={colors.textPrimary}
+              >
+                <Picker.Item label="OEM" value="OEM" />
+                <Picker.Item label="Vendor" value="Vendor" />
+              </Picker>
+            </View>
+          </View>
+          <View style={styles.fieldHalf}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              {form.providerType === "OEM" ? "OEM" : "VENDOR"}
+            </Text>
+            <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+              <Picker
+                selectedValue={form.serviceProviderId}
+                onValueChange={handleProviderSelect}
+                style={{ color: colors.textPrimary }}
+                dropdownIconColor={colors.textPrimary}
+              >
+                <Picker.Item label="— Select —" value="" />
+                {providerOptions.map((p) => (
+                  <Picker.Item
+                    key={p.oemId || p.vendorId}
+                    label={p.oemName || p.vendorName}
+                    value={String(p.oemId || p.vendorId)}
+                  />
+                ))}
+              </Picker>
+            </View>
+          </View>
+        </View>
+
+        <Text style={[styles.label, { color: colors.textMuted }]}>ASSIGNED TO</Text>
+        <TouchableOpacity
+          style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}
+          onPress={() => openUserModal("assignedTo")}
+        >
+          <Text style={{ color: form.assignedToUserId ? colors.textPrimary : colors.placeholder, padding: 12 }}>
+            {form.assignedToName || "Search user…"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Raised By / Location */}
       <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Raised By / Location</Text>
 
+        <Text style={[styles.label, { color: colors.textMuted }]}>RAISED BY (USER)</Text>
         <TouchableOpacity
           style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground, marginBottom: spacing.sm }]}
-          onPress={() => setShowUserModal(true)}
+          onPress={() => openUserModal("requestedBy")}
         >
           <Text style={{ color: form.requestedByUserId ? colors.textPrimary : colors.placeholder, padding: 12 }}>
-            {selectedUser ? `${selectedUser.fullName || selectedUser.name} (${selectedUser.employeeCode || "User"})` : "Search user by name or employee code…"}
+            {form.requestedByName ? form.requestedByName : "Search user by name or employee code…"}
           </Text>
         </TouchableOpacity>
         {errors.requestedByUserId && <Text style={styles.errorText}>{errors.requestedByUserId}</Text>}
@@ -389,22 +614,43 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
         </View>
       </View>
 
+      {/* Affected Asset */}
       <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Asset Information</Text>
-        <InputField
-          icon="cube-outline"
-          placeholder="Asset"
-          value={
-            asset
-              ? asset.assetCode || asset.code || asset.name || `#${asset.id}`
-              : form.assetId
-                ? `#${form.assetId}`
-                : ""
-          }
-          onChangeText={() => {}}
-          editable={false}
-          theme={colors}
-        />
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Affected Asset (optional)</Text>
+
+        {form.requestedByUserId ? (
+          <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+            <Picker
+              selectedValue={form.assetId}
+              onValueChange={(val) => updateForm("assetId", val)}
+              style={{ color: colors.textPrimary }}
+              dropdownIconColor={colors.textPrimary}
+            >
+              <Picker.Item
+                label={userAssets.length ? "— Select Asset —" : "— No assets allocated to this user —"}
+                value=""
+              />
+              {userAssets.map((a) => (
+                <Picker.Item
+                  key={a.assetId}
+                  label={a.assetName ? `${a.assetCode} — ${a.assetName}` : a.assetCode}
+                  value={String(a.assetId)}
+                />
+              ))}
+            </Picker>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}
+            onPress={() => setShowAssetSearch(true)}
+          >
+            <Text style={{ color: form.assetId ? colors.textPrimary : colors.placeholder, padding: 12 }}>
+              {form.assetId
+                ? (asset ? asset.assetCode || asset.code || `#${form.assetId}` : `#${form.assetId}`)
+                : "Search asset by code…"}
+            </Text>
+          </TouchableOpacity>
+        )}
         {errors.assetId && <Text style={styles.errorText}>{errors.assetId}</Text>}
       </View>
 
@@ -416,13 +662,16 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
         />
       </View>
 
-      <Modal visible={showUserModal} animationType="slide" transparent>
+      {/* User picker modal (Raised By / Assigned To) */}
+      <Modal visible={!!userModalTarget} animationType="slide" transparent>
         <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.7)" }]}>
           <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Select User</Text>
-              <TouchableOpacity onPress={() => { setShowUserModal(false); setUserSearch(""); }}>
-                <Text style={{ color: colors.textPrimary, fontSize: 18 }}>✕</Text>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+                {userModalTarget === "assignedTo" ? "Select Assignee" : "Select User"}
+              </Text>
+              <TouchableOpacity onPress={() => { setUserModalTarget(null); setUserSearch(""); }}>
+                <Ionicons name="close" size={22} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
             <InputField
@@ -455,7 +704,51 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
               )}
               ListEmptyComponent={
                 <Text style={{ color: colors.textMuted, textAlign: "center", marginVertical: spacing.md }}>
-                  No users found
+                  {loadingRefData ? "Loading users…" : "No users found"}
+                </Text>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Asset search modal (fallback when no Raised By user set) */}
+      <Modal visible={showAssetSearch} animationType="slide" transparent>
+        <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.7)" }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Search Asset</Text>
+              <TouchableOpacity onPress={() => { setShowAssetSearch(false); setAssetSearchText(""); setAssetSearchResults([]); }}>
+                <Ionicons name="close" size={22} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <InputField
+              placeholder="Asset code or QR data..."
+              value={assetSearchText}
+              onChangeText={runAssetSearch}
+              theme={colors}
+            />
+            <FlatList
+              data={assetSearchResults}
+              keyExtractor={(item, idx) => String(item.assetId || item.id || idx)}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.userItem, { borderBottomColor: colors.cardBorder }]}
+                  onPress={() => selectSearchedAsset(item)}
+                >
+                  <Text style={{ color: colors.textPrimary, fontFamily: typography.fontBodySemiBold }}>
+                    {item.assetCode || item.code || `#${item.assetId || item.id}`}
+                  </Text>
+                  {!!item.assetName && (
+                    <Text style={{ color: colors.textSecondary, fontFamily: typography.fontBody, fontSize: typography.small }}>
+                      {item.assetName}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <Text style={{ color: colors.textMuted, textAlign: "center", marginVertical: spacing.md }}>
+                  {assetSearchLoading ? "Searching…" : "Type to search for an asset"}
                 </Text>
               }
             />
@@ -463,6 +756,25 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
         </View>
       </Modal>
     </ScrollView>
+    {sidebarOpen && (
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={closeSidebar} />
+      )}
+      <AppSidebar
+        colors={colors}
+        sidebarOpen={sidebarOpen}
+        slideAnim={slideAnim}
+        isAnimating={isAnimating}
+        toggleSidebar={toggleSidebar}
+        closeSidebar={closeSidebar}
+        navigation={navigation}
+        route={route}
+        username={route?.params?.user?.name || route?.params?.user?.email || "User"}
+        roleName={route?.params?.user?.roleName || route?.params?.user?.role || "User"}
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+        contextTheme={contextTheme}
+      />
+  </View>
   );
 }
 
@@ -574,5 +886,90 @@ const styles = StyleSheet.create({
   userItem: {
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
+  },
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    zIndex: 10,
+  },
+  sidebar: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: SIDEBAR_WIDTH,
+    borderRightWidth: 1,
+    zIndex: 20,
+    flexDirection: "column",
+  },
+  sidebarHeader: {
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: darkTheme.cardBorder,
+  },
+  sidebarHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sidebarTitle: {
+    fontFamily: typography.fontHeading,
+    fontSize: typography.h2,
+    fontWeight: "800",
+  },
+  sidebarCloseButton: {
+    padding: spacing.xs,
+    marginRight: -spacing.xs,
+  },
+  sidebarMenu: {
+    flex: 1,
+  },
+  sidebarItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+  },
+  sidebarIcon: {
+    marginRight: spacing.md,
+  },
+  sidebarLabel: {
+    fontFamily: typography.fontBodySemiBold,
+    fontSize: typography.body,
+  },
+  sidebarFooter: {
+    borderTopWidth: 1,
+    paddingVertical: spacing.md,
+  },
+  userSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
+  userAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontFamily: typography.fontBodySemiBold,
+    fontSize: typography.body,
+  },
+  userRole: {
+    fontFamily: typography.fontBody,
+    fontSize: typography.small,
+    marginTop: 2,
   },
 });

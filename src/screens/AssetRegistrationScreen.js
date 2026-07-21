@@ -7,18 +7,13 @@ import { spacing, radius, typography } from "../theme/colors";
 import { getAssetById, searchAsset } from "../api/asset";
 import { useTheme } from "../context/ThemeContext";
 import ThemeToggle from "../components/ThemeToggle";
+import AppSidebar from "../components/AppSidebar";
 
 const SIDEBAR_WIDTH = 260;
 
-const MENU_ITEMS = [
-  { label: "Asset", icon: "cube", screen: "Dashboard" },
-  { label: "Service Request", icon: "construct", screen: "ServiceRequest" },
-  { label: "Incident Request", icon: "warning", screen: "IncidentRequest" },
-];
-
 export default function AssetRegistrationScreen({ theme, navigation, route }) {
-  const colors = theme || darkTheme;
   const { isDark, toggleTheme, theme: contextTheme } = useTheme();
+  const colors = contextTheme || darkTheme;
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [showAssetModal, setShowAssetModal] = useState(false);
@@ -65,27 +60,6 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
       setSidebarOpen(false);
       isAnimating.current = false;
     });
-  };
-
-  const handleMenuPress = (screen) => {
-    closeSidebar();
-    setTimeout(() => {
-      navigation.navigate(screen);
-    }, 260);
-  };
-
-  const handleLogout = () => {
-    closeSidebar();
-    setTimeout(() => {
-      navigation.replace("Login");
-    }, 260);
-  };
-
-  const handleChangePassword = () => {
-    closeSidebar();
-    setTimeout(() => {
-      navigation.navigate("ForgotPassword");
-    }, 260);
   };
 
   const handleBarCodeScanned = async ({ data }) => {
@@ -183,75 +157,6 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
     );
   };
 
-  const renderSidebar = () => (
-    <Animated.View
-      style={[
-        styles.sidebar,
-        {
-          backgroundColor: colors.cardBackground,
-          borderColor: colors.cardBorder,
-          transform: [{ translateX: slideAnim }],
-        },
-      ]}
-    >
-      <View style={styles.sidebarHeader}>
-        <View style={styles.sidebarHeaderRow}>
-          <Text style={[styles.sidebarTitle, { color: colors.textPrimary }]}>Menu</Text>
-          <TouchableOpacity onPress={closeSidebar} style={styles.sidebarCloseButton}>
-            <Ionicons name="close" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.sidebarMenu}>
-        {MENU_ITEMS.map((item) => (
-          <TouchableOpacity
-            key={item.label}
-            style={[
-              styles.sidebarItem,
-              { borderBottomColor: colors.cardBorder },
-            ]}
-            onPress={() => handleMenuPress(item.screen)}
-          >
-            <Ionicons name={item.icon} size={22} color={colors.accentBlue} style={styles.sidebarIcon} />
-            <Text style={[styles.sidebarLabel, { color: colors.textPrimary }]}>{item.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={styles.sidebarThemeRow}>
-        <Text style={[styles.sidebarThemeLabel, { color: colors.textSecondary }]}>Dark Mode</Text>
-        <ThemeToggle isDark={isDark} theme={contextTheme} onPress={toggleTheme} />
-      </View>
-
-      <View style={[styles.sidebarFooter, { borderTopColor: colors.cardBorder }]}>
-        <View style={styles.userSection}>
-          <View style={[styles.userAvatar, { backgroundColor: colors.accentBlue }]}>
-            <Ionicons name="person" size={20} color={colors.white} />
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={[styles.userName, { color: colors.textPrimary }]} numberOfLines={1}>
-              {username}
-            </Text>
-            <Text style={[styles.userRole, { color: colors.textSecondary }]} numberOfLines={1}>
-              {roleName}
-            </Text>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.sidebarItem} onPress={handleChangePassword}>
-          <Ionicons name="key-outline" size={22} color={colors.textSecondary} style={styles.sidebarIcon} />
-          <Text style={[styles.sidebarLabel, { color: colors.textSecondary }]}>Change Password</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.sidebarItem} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={22} color={colors.danger} style={styles.sidebarIcon} />
-          <Text style={[styles.sidebarLabel, { color: colors.danger }]}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-    </Animated.View>
-  );
-
   if (!permission) {
     return (
       <View style={[styles.root, { backgroundColor: colors.background, alignItems: "center", justifyContent: "center" }]}>
@@ -330,7 +235,21 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
       {sidebarOpen && (
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={closeSidebar} />
       )}
-      {renderSidebar()}
+      <AppSidebar
+        colors={colors}
+        sidebarOpen={sidebarOpen}
+        slideAnim={slideAnim}
+        isAnimating={isAnimating}
+        toggleSidebar={toggleSidebar}
+        closeSidebar={closeSidebar}
+        navigation={navigation}
+        route={route}
+        username={username}
+        roleName={roleName}
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+        contextTheme={contextTheme}
+      />
       {renderAssetModal()}
     </View>
   );
