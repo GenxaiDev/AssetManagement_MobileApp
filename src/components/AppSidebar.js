@@ -48,7 +48,7 @@ export default function AppSidebar({
   const handleChangePassword = () => {
     closeSidebar();
     setTimeout(() => {
-      navigation.navigate("ForgotPassword");
+      navigation.navigate("ChangePassword");
     }, 260);
   };
 
