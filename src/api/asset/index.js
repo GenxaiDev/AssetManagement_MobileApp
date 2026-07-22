@@ -9,8 +9,8 @@ export const getAssets = async (filters = {}) => {
 
 export const searchAsset = async (assetCode) => {
   const response = await client.get("/asset", { params: { searchText: assetCode } });
-  const list = response.data?.data;
-  return Array.isArray(list) ? (list[0] || null) : list || null;
+  const list = response.data?.data || response.data;
+  return list;
 };
 
 export const getAssetById = async (id) => {

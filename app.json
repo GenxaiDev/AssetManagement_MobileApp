@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "GenxAI Asset",
-    "slug": "genx-asset-app",
+    "slug": "assetmanagement",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -12,14 +12,15 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0B1F3A"
-      }
+      },
+      "package": "com.trusha_kyada.genxassetapp"
     },
     "web": {
       "bundler": "metro"
     },
     "extra": {
       "eas": {
-        "projectId": "39212241-e86e-42e3-b4f3-3a5eca03d2a8"
+        "projectId": "0e7155e5-82fc-4367-adf0-934304e96490"
       }
     },
     "plugins": [

@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
+const AUTH_DATA_KEY = "auth_data";
 
 export const tokenStorage = {
   async getAccessToken() {
@@ -20,6 +21,21 @@ export const tokenStorage = {
       return token;
     } catch (error) {
       console.error("Error getting refresh token:", error);
+      return null;
+    }
+  },
+
+  async getAuthData() {
+    try {
+      const token = await SecureStore.getItemAsync(AUTH_DATA_KEY);
+      if (!token) return null;
+      try {
+        return JSON.parse(token);
+      } catch {
+        return token;
+      }
+    } catch (error) {
+      console.error("Error getting auth data:", error);
       return null;
     }
   },
@@ -46,6 +62,14 @@ export const tokenStorage = {
       if (refreshToken) await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
     } catch (error) {
       console.error("Error setting tokens:", error);
+    }
+  },
+
+  async setAuthData(authData) {
+    try {
+      await SecureStore.setItemAsync(AUTH_DATA_KEY, authData);
+    } catch (error) {
+      console.error("Error setting auth data:", error);
     }
   },
 

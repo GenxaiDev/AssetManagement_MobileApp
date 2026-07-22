@@ -10,6 +10,7 @@ export const login = async (email, password) => {
 
   if (accessToken) {
     await tokenStorage.setTokens(accessToken, refreshToken);
+    await tokenStorage.setAuthData(JSON.stringify(data.data || data));
   }
 
   return data;

@@ -31,6 +31,8 @@ import { searchAsset } from "../api/asset";
 import { z } from "zod";
 import { useTheme } from "../context/ThemeContext";
 import AppSidebar from "../components/AppSidebar";
+import { tokenStorage } from "../utils/storage";
+
 
 const SIDEBAR_WIDTH = 260;
 
@@ -53,6 +55,7 @@ export default function IncidentRequestScreen({ navigation, route }) {
   const { isDark, toggleTheme, theme } = useTheme();
   const colors = theme;
   const asset = route?.params?.asset || null;
+  const [assetDetail, setAssetDetail] = useState(asset || null);
 
   // ─── Reference data ────────────────────────────────────────────────────
   const [categories, setCategories] = useState([]);
@@ -65,6 +68,7 @@ export default function IncidentRequestScreen({ navigation, route }) {
   const [loadingRefData, setLoadingRefData] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [authUser, setAuthUser] = useState(null);
 
   const [form, setForm] = useState({
     categoryId: "",
@@ -100,11 +104,17 @@ export default function IncidentRequestScreen({ navigation, route }) {
 
   useEffect(() => {
     loadFormData();
+    const loadAuth = async () => {
+      const data = await tokenStorage.getAuthData();
+      setAuthUser(data);
+    };
+    loadAuth();
   }, []);
 
   useEffect(() => {
     if (asset) {
       setForm((f) => ({ ...f, assetId: asset.id || asset.assetId || "" }));
+      setAssetDetail(asset);
     }
   }, [asset]);
 
@@ -234,8 +244,8 @@ export default function IncidentRequestScreen({ navigation, route }) {
     setAssetSearchLoading(true);
     try {
       const res = await searchAsset(text.trim());
-      const list = Array.isArray(res?.data) ? res.data : res?.data?.data ?? (res ? [res] : []);
-      setAssetSearchResults(Array.isArray(list) ? list : [list].filter(Boolean));
+      const list = Array.isArray(res) ? res : res ? [res] : [];
+      setAssetSearchResults(list);
     } catch (err) {
       setAssetSearchResults([]);
     } finally {
@@ -244,6 +254,7 @@ export default function IncidentRequestScreen({ navigation, route }) {
   };
 
   const selectSearchedAsset = (a) => {
+    setAssetDetail(a);
     updateForm("assetId", a.assetId || a.id);
     setShowAssetSearch(false);
     setAssetSearchText("");
@@ -352,7 +363,79 @@ export default function IncidentRequestScreen({ navigation, route }) {
         {/* Request Details */}
         <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Request Details</Text>
-
+          {/* Affected Asset — same conditional pattern as web: allocation dropdown if a
+            Raised By user is selected, otherwise a free asset search */}
+          <Text style={[styles.label, { color: colors.textMuted }]}>
+                        Affected Asset (optional)
+                      </Text>
+          
+                      {form.requestedByUserId ? (
+                        <View
+                          style={[
+                            styles.pickerWrap,
+                            {
+                              borderColor: colors.inputBorder,
+                              backgroundColor: colors.inputBackground,
+                            },
+                          ]}
+                        >
+                          <Picker
+                            selectedValue={form.assetId}
+                            onValueChange={(val) => updateForm("assetId", val)}
+                            style={{ color: colors.textPrimary }}
+                            dropdownIconColor={colors.textPrimary}
+                          >
+                            <Picker.Item
+                              label={
+                                userAssets.length
+                                  ? "— Select Asset —"
+                                  : "— No assets allocated to this user —"
+                              }
+                              value=""
+                            />
+                            {userAssets.map((a) => (
+                              <Picker.Item
+                                key={a.assetId}
+                                label={
+                                  a.assetName
+                                    ? `${a.assetCode} — ${a.assetName}`
+                                    : a.assetCode
+                                }
+                                value={String(a.assetId)}
+                              />
+                            ))}
+                          </Picker>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={[
+                            styles.pickerWrap,
+                            {
+                              borderColor: colors.inputBorder,
+                              backgroundColor: colors.inputBackground,
+                            },
+                          ]}
+                          onPress={() => setShowAssetSearch(true)}
+                        >
+                          <Text
+                            style={{
+                              color: form.assetId
+                                ? colors.textPrimary
+                                : colors.placeholder,
+                              padding: 12,
+                            }}
+                          >
+                            {form.assetId
+                              ? assetDetail
+                                ? assetDetail.assetCode || assetDetail.code || `#${form.assetId}`
+                                : `#${form.assetId}`
+                              : "Search asset by code…"}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                      {errors.assetId && (
+                        <Text style={styles.errorText}>{errors.assetId}</Text>
+                      )}
           <View style={styles.row}>
             <View style={styles.fieldHalf}>
               <Text style={[styles.label, { color: colors.textMuted }]}>CATEGORY</Text>
@@ -389,7 +472,7 @@ export default function IncidentRequestScreen({ navigation, route }) {
             </View>
           </View>
 
-          <View style={styles.row}>
+          {/* <View style={styles.row}>
             <View style={styles.fieldHalf}>
               <Text style={[styles.label, { color: colors.textMuted }]}>ISSUE RAISED ON</Text>
               <TouchableOpacity
@@ -418,7 +501,7 @@ export default function IncidentRequestScreen({ navigation, route }) {
               )}
             </View>
             <View style={styles.fieldHalf} />
-          </View>
+          </View> */}
 
           <Text style={[styles.label, { color: colors.textMuted }]}>SUBJECT / TITLE *</Text>
           <InputField
@@ -444,171 +527,136 @@ export default function IncidentRequestScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* Service Provider — same as web: Incident shows Provider Type + Provider, but NOT Assigned To */}
-        <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Service Provider</Text>
+        {authUser?.roleName.toLowerCase() == 'location manager' && (
+          <>
+            {/* Service Provider — same as web: Incident shows Provider Type + Provider, but NOT Assigned To */}
+            <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Service Provider</Text>
 
-          <View style={styles.row}>
-            <View style={styles.fieldHalf}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>PROVIDER TYPE</Text>
-              <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
-                <Picker
-                  selectedValue={form.providerType}
-                  onValueChange={handleProviderTypeChange}
-                  style={{ color: colors.textPrimary }}
-                  dropdownIconColor={colors.textPrimary}
-                >
-                  <Picker.Item label="OEM" value="OEM" />
-                  <Picker.Item label="Vendor" value="Vendor" />
-                </Picker>
+              <View style={styles.row}>
+                <View style={styles.fieldHalf}>
+                  <Text style={[styles.label, { color: colors.textMuted }]}>PROVIDER TYPE</Text>
+                  <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+                    <Picker
+                      selectedValue={form.providerType}
+                      onValueChange={handleProviderTypeChange}
+                      style={{ color: colors.textPrimary }}
+                      dropdownIconColor={colors.textPrimary}
+                    >
+                      <Picker.Item label="OEM" value="OEM" />
+                      <Picker.Item label="Vendor" value="Vendor" />
+                    </Picker>
+                  </View>
+                </View>
+                <View style={styles.fieldHalf}>
+                  <Text style={[styles.label, { color: colors.textMuted }]}>
+                    {form.providerType === "OEM" ? "OEM" : "VENDOR"}
+                  </Text>
+                  <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+                    <Picker
+                      selectedValue={form.serviceProviderId}
+                      onValueChange={handleProviderSelect}
+                      style={{ color: colors.textPrimary }}
+                      dropdownIconColor={colors.textPrimary}
+                    >
+                      <Picker.Item label="— Select —" value="" />
+                      {providerOptions.map((p) => (
+                        <Picker.Item
+                          key={p.oemId || p.vendorId}
+                          label={p.oemName || p.vendorName}
+                          value={String(p.oemId || p.vendorId)}
+                        />
+                      ))}
+                    </Picker>
+                  </View>
+                </View>
               </View>
             </View>
-            <View style={styles.fieldHalf}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>
-                {form.providerType === "OEM" ? "OEM" : "VENDOR"}
-              </Text>
-              <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
-                <Picker
-                  selectedValue={form.serviceProviderId}
-                  onValueChange={handleProviderSelect}
-                  style={{ color: colors.textPrimary }}
-                  dropdownIconColor={colors.textPrimary}
-                >
-                  <Picker.Item label="— Select —" value="" />
-                  {providerOptions.map((p) => (
-                    <Picker.Item
-                      key={p.oemId || p.vendorId}
-                      label={p.oemName || p.vendorName}
-                      value={String(p.oemId || p.vendorId)}
-                    />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-          </View>
-        </View>
 
-        {/* Raised By / Location */}
-        <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Raised By / Location</Text>
+            {/* Raised By / Location */}
+            <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Raised By / Location</Text>
 
-          <TouchableOpacity
-            style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground, marginBottom: spacing.sm }]}
-            onPress={() => setShowUserModal(true)}
-          >
-            <Text style={{ color: form.requestedByUserId ? colors.textPrimary : colors.placeholder, padding: 12 }}>
-              {form.requestedByName ? form.requestedByName : "Search user by name or employee code…"}
-            </Text>
-          </TouchableOpacity>
-          {errors.requestedByUserId && <Text style={styles.errorText}>{errors.requestedByUserId}</Text>}
-
-          <View style={styles.row}>
-            <View style={styles.fieldHalf}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>NAME *</Text>
-              <InputField
-                placeholder="Requester name"
-                value={form.requestedByName}
-                onChangeText={(val) => updateForm("requestedByName", val)}
-                theme={colors}
-              />
-              {errors.requestedByName && <Text style={styles.errorText}>{errors.requestedByName}</Text>}
-            </View>
-            <View style={styles.fieldHalf}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>PHONE</Text>
-              <InputField
-                placeholder="Phone number"
-                value={form.requestedByPhone}
-                onChangeText={(val) => updateForm("requestedByPhone", val)}
-                theme={colors}
-                keyboardType="phone-pad"
-              />
-            </View>
-          </View>
-
-          <Text style={[styles.label, { color: colors.textMuted }]}>EMAIL</Text>
-          <InputField
-            placeholder="Email address"
-            value={form.requestedByEmail}
-            onChangeText={(val) => updateForm("requestedByEmail", val)}
-            theme={colors}
-            keyboardType="email-address"
-          />
-
-          <View style={styles.row}>
-            <View style={styles.fieldHalf}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>CLIENT</Text>
-              <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
-                <Picker
-                  selectedValue={form.clientId}
-                  onValueChange={(val) => updateForm("clientId", val)}
-                  style={{ color: colors.textPrimary }}
-                  dropdownIconColor={colors.textPrimary}
-                >
-                  <Picker.Item label="— Select Client —" value="" />
-                  {clients.map((c) => (
-                    <Picker.Item key={c.clientId} label={c.clientName} value={String(c.clientId)} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-            <View style={styles.fieldHalf}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>LOCATION</Text>
-              <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
-                <Picker
-                  selectedValue={form.locationId}
-                  onValueChange={(val) => updateForm("locationId", val)}
-                  style={{ color: colors.textPrimary }}
-                  dropdownIconColor={colors.textPrimary}
-                >
-                  <Picker.Item label="— Select Location —" value="" />
-                  {locations.map((l) => (
-                    <Picker.Item key={l.locationId} label={l.locationName} value={String(l.locationId)} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Affected Asset — same conditional pattern as web: allocation dropdown if a
-            Raised By user is selected, otherwise a free asset search */}
-        <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Affected Asset (optional)</Text>
-
-          {form.requestedByUserId ? (
-            <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
-              <Picker
-                selectedValue={form.assetId}
-                onValueChange={(val) => updateForm("assetId", val)}
-                style={{ color: colors.textPrimary }}
-                dropdownIconColor={colors.textPrimary}
+              <TouchableOpacity
+                style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground, marginBottom: spacing.sm }]}
+                onPress={() => setShowUserModal(true)}
               >
-                <Picker.Item
-                  label={userAssets.length ? "— Select Asset —" : "— No assets allocated to this user —"}
-                  value=""
-                />
-                {userAssets.map((a) => (
-                  <Picker.Item
-                    key={a.assetId}
-                    label={a.assetName ? `${a.assetCode} — ${a.assetName}` : a.assetCode}
-                    value={String(a.assetId)}
+                <Text style={{ color: form.requestedByUserId ? colors.textPrimary : colors.placeholder, padding: 12 }}>
+                  {form.requestedByName ? form.requestedByName : "Search user by name or employee code…"}
+                </Text>
+              </TouchableOpacity>
+              {errors.requestedByUserId && <Text style={styles.errorText}>{errors.requestedByUserId}</Text>}
+
+              <View style={styles.row}>
+                <View style={styles.fieldHalf}>
+                  <Text style={[styles.label, { color: colors.textMuted }]}>NAME *</Text>
+                  <InputField
+                    placeholder="Requester name"
+                    value={form.requestedByName}
+                    onChangeText={(val) => updateForm("requestedByName", val)}
+                    theme={colors}
                   />
-                ))}
-              </Picker>
+                  {errors.requestedByName && <Text style={styles.errorText}>{errors.requestedByName}</Text>}
+                </View>
+                <View style={styles.fieldHalf}>
+                  <Text style={[styles.label, { color: colors.textMuted }]}>PHONE</Text>
+                  <InputField
+                    placeholder="Phone number"
+                    value={form.requestedByPhone}
+                    onChangeText={(val) => updateForm("requestedByPhone", val)}
+                    theme={colors}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+              </View>
+
+              <Text style={[styles.label, { color: colors.textMuted }]}>EMAIL</Text>
+              <InputField
+                placeholder="Email address"
+                value={form.requestedByEmail}
+                onChangeText={(val) => updateForm("requestedByEmail", val)}
+                theme={colors}
+                keyboardType="email-address"
+              />
+
+              <View style={styles.row}>
+                <View style={styles.fieldHalf}>
+                  <Text style={[styles.label, { color: colors.textMuted }]}>CLIENT</Text>
+                  <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+                    <Picker
+                      selectedValue={form.clientId}
+                      onValueChange={(val) => updateForm("clientId", val)}
+                      style={{ color: colors.textPrimary }}
+                      dropdownIconColor={colors.textPrimary}
+                    >
+                      <Picker.Item label="— Select Client —" value="" />
+                      {clients.map((c) => (
+                        <Picker.Item key={c.clientId} label={c.clientName} value={String(c.clientId)} />
+                      ))}
+                    </Picker>
+                  </View>
+                </View>
+                <View style={styles.fieldHalf}>
+                  <Text style={[styles.label, { color: colors.textMuted }]}>LOCATION</Text>
+                  <View style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}>
+                    <Picker
+                      selectedValue={form.locationId}
+                      onValueChange={(val) => updateForm("locationId", val)}
+                      style={{ color: colors.textPrimary }}
+                      dropdownIconColor={colors.textPrimary}
+                    >
+                      <Picker.Item label="— Select Location —" value="" />
+                      {locations.map((l) => (
+                        <Picker.Item key={l.locationId} label={l.locationName} value={String(l.locationId)} />
+                      ))}
+                    </Picker>
+                  </View>
+                </View>
+              </View>
             </View>
-          ) : (
-            <TouchableOpacity
-              style={[styles.pickerWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}
-              onPress={() => setShowAssetSearch(true)}
-            >
-              <Text style={{ color: form.assetId ? colors.textPrimary : colors.placeholder, padding: 12 }}>
-                {form.assetId
-                  ? (asset ? asset.assetCode || asset.code || `#${form.assetId}` : `#${form.assetId}`)
-                  : "Search asset by code…"}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+          </>
+        )}
+
 
         <View style={styles.footer}>
           <PrimaryButton
