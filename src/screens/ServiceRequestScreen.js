@@ -31,6 +31,7 @@ import { searchAsset } from "../api/asset";
 import { z } from "zod";
 import { useTheme } from "../context/ThemeContext";
 import AppSidebar from "../components/AppSidebar";
+import AppHeader from "../components/AppHeader";
 import { tokenStorage } from "../utils/storage";
 
 const SIDEBAR_WIDTH = 260;
@@ -102,7 +103,6 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
     serviceProviderId: "",
     serviceProviderName: "",
     assignedToUserId: "",
-    assignedToName: "",
     requestedByUserId: "",
     requestedByName: "",
     requestedByPhone: "",
@@ -146,20 +146,41 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
     }
   }, [asset]);
 
+  useEffect(() => {
+    if (!authUser) return;
+    const isLocationManager = authUser.roleName.toLowerCase() === "location manager";
+    setForm((f) => ({
+      ...f,
+      assignedToUserId: isLocationManager ? "" : (locations.find((l) => l.locationId === authUser?.locationId)?.managerUserId || ""),
+      requestedByUserId: isLocationManager ? "" : (authUser.userId || ""),
+      requestedByName: isLocationManager ? "" : (authUser.fullName || ""),
+      requestedByPhone: isLocationManager ? "" : (authUser.phone || ""),
+      requestedByEmail: isLocationManager ? "" : (authUser.companyEmail || ""),
+    }));
+  }, [authUser, locations]);
+
   const loadFormData = async () => {
     setLoadingRefData(true);
+    const isLocationManager =
+      authUser?.roleName?.toLowerCase() === "location manager";
+
     const results = await Promise.allSettled([
       getCategories("Service"),
       getAllLocations(),
-      getAllClients(),
       searchUsers({ employmentStatus: "Active" }),
       getAllAllocations({ allocationStatus: "Active" }),
-      getAllOems(),
-      getAllVendors(),
+      ...(isLocationManager
+        ? [getAllClients(), getAllOems(), getAllVendors()]
+        : []),
     ]);
 
-    const [catRes, locRes, clientRes, userRes, allocRes, oemRes, vendorRes] =
-      results;
+    const catRes = results[0];
+    const locRes = results[1];
+    const userRes = results[2];
+    const allocRes = results[3];
+    const clientRes = isLocationManager ? results[4] : undefined;
+    const oemRes = isLocationManager ? results[5] : undefined;
+    const vendorRes = isLocationManager ? results[6] : undefined;
 
     const unwrap = (res) => {
       if (res.status !== "fulfilled") return [];
@@ -173,8 +194,9 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
     if (locRes.status === "fulfilled") setLocations(unwrap(locRes));
     else console.error("getAllLocations failed:", locRes.reason?.message);
 
-    if (clientRes.status === "fulfilled") setClients(unwrap(clientRes));
-    else console.error("getAllClients failed:", clientRes.reason?.message);
+    if (clientRes?.status === "fulfilled") setClients(unwrap(clientRes));
+    else if (clientRes)
+      console.error("getAllClients failed:", clientRes.reason?.message);
 
     if (userRes.status === "fulfilled") setUsers(unwrap(userRes));
     else console.error("searchUsers failed:", userRes.reason?.message);
@@ -182,11 +204,13 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
     if (allocRes.status === "fulfilled") setAllocations(unwrap(allocRes));
     else console.error("getAllAllocations failed:", allocRes.reason?.message);
 
-    if (oemRes.status === "fulfilled") setOems(unwrap(oemRes));
-    else console.error("getAllOems failed:", oemRes.reason?.message);
+    if (oemRes?.status === "fulfilled") setOems(unwrap(oemRes));
+    else if (oemRes)
+      console.error("getAllOems failed:", oemRes.reason?.message);
 
-    if (vendorRes.status === "fulfilled") setVendors(unwrap(vendorRes));
-    else console.error("getAllVendors failed:", vendorRes.reason?.message);
+    if (vendorRes?.status === "fulfilled") setVendors(unwrap(vendorRes));
+    else if (vendorRes)
+      console.error("getAllVendors failed:", vendorRes.reason?.message);
 
     setLoadingRefData(false);
   };
@@ -406,26 +430,19 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
     } catch (err) {
       Alert.alert("Error", err.message || "Failed to create service request.");
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={toggleSidebar} style={styles.collapseButton}>
-          <Ionicons name="menu" size={24} color={colors.accentBlue} />
-        </TouchableOpacity>
-        <View style={styles.headerText}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>
-            Service Request
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Raise a new service request for the scanned asset.
-          </Text>
-        </View>
-      </View>
-      <ScrollView style={{ flex: 1 }}>
+      <AppHeader
+        title="Service Request"
+        subtitle="Raise a new service request for the scanned asset."
+        colors={colors}
+        onMenuPress={toggleSidebar}
+      />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: spacing.md }}>
         {/* Request Details */}
         {/* Affected Asset */}
 
@@ -462,11 +479,7 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
                   dropdownIconColor={colors.textPrimary}
                 >
                   <Picker.Item
-                    label={
-                      userAssets.length
-                        ? "— Select Asset —"
-                        : "— No assets allocated to this user —"
-                    }
+                    label="— Select Asset —"
                     value=""
                   />
                   {userAssets.map((a) => (
@@ -683,7 +696,7 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
           </View>
         </View>
 
-        {authUser?.roleName.toLowerCase() == "location manager" && (
+        {authUser?.roleName?.toLowerCase() === "location manager" && (
           <>
             {/* Service Provider */}
             <View
@@ -1084,11 +1097,12 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
                   <TouchableOpacity
                     style={[
                       styles.userItem,
-                      { borderBottomColor: colors.cardBorder },
+                      { borderBottomColor: colors.cardBorder, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
                     ]}
                     onPress={() => selectSearchedAsset(item)}
                   >
-                    <Text
+                    <View>
+                      <Text
                       style={{
                         color: colors.textPrimary,
                         fontFamily: typography.fontBodySemiBold,
@@ -1098,7 +1112,7 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
                         item.code ||
                         `#${item.assetId || item.id}`}
                     </Text>
-                    {!!item.assetName && (
+                    {!!item.assetTypeName && (
                       <Text
                         style={{
                           color: colors.textSecondary,
@@ -1106,9 +1120,19 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
                           fontSize: typography.small,
                         }}
                       >
-                        {item.assetName}
+                        {item.assetTypeName}
                       </Text>
                     )}
+                    </View>
+                    <Text
+                      style={{
+                        color: colors.textSecondary,
+                          fontFamily: typography.fontBody,
+                          fontSize: typography.small,
+                      }}
+                    >
+                      {item.assetStatus}
+                    </Text>
                   </TouchableOpacity>
                 )}
                 ListEmptyComponent={

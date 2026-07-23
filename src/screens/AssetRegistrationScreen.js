@@ -8,6 +8,7 @@ import { getAssetById, searchAsset } from "../api/asset";
 import { useTheme } from "../context/ThemeContext";
 import ThemeToggle from "../components/ThemeToggle";
 import AppSidebar from "../components/AppSidebar";
+import AppHeader from "../components/AppHeader";
 
 const SIDEBAR_WIDTH = 260;
 
@@ -179,17 +180,12 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={toggleSidebar} style={styles.menuButton}>
-          <Ionicons name="menu" size={26} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <View style={styles.headerText}>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Asset Registration</Text>
-          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-            Scan asset QR code or enter asset code manually
-          </Text>
-        </View>
-      </View>
+      <AppHeader
+        title="Asset Registration"
+        subtitle="Scan asset QR code or enter asset code manually"
+        colors={colors}
+        onMenuPress={toggleSidebar}
+      />
 
       <View style={styles.scannerContainer}>
         <CameraView
@@ -287,7 +283,8 @@ const styles = StyleSheet.create({
   scannerContainer: {
     flex: 1,
     marginHorizontal: spacing.lg,
-    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.card,
     overflow: "hidden",
     position: "relative",
   },

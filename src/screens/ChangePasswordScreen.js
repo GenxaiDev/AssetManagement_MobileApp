@@ -11,10 +11,10 @@ import {
 import { useTheme } from "../context/ThemeContext";
 import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
+import AppHeader from "../components/AppHeader";
 import { changePassword as changePasswordApi } from "../api/auth/changePassword";
 import { darkTheme, lightTheme } from "../theme/colors";
 import { spacing, radius, typography } from "../theme/colors";
-import { Ionicons } from "@expo/vector-icons";
 
 export default function ChangePasswordScreen({ navigation }) {
   const { isDark, theme } = useTheme();
@@ -62,6 +62,11 @@ export default function ChangePasswordScreen({ navigation }) {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
+      <AppHeader
+        title="Change Password"
+        colors={theme}
+        onBackPress={() => navigation.goBack()}
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
@@ -70,19 +75,6 @@ export default function ChangePasswordScreen({ navigation }) {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.headerRow}>
-            <Ionicons
-              name="chevron-back"
-              size={24}
-              color={colors.textPrimary}
-              onPress={() => navigation.goBack()}
-            />
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-              Change Password
-            </Text>
-            <View style={{ width: 24 }} />
-          </View>
-
           <Text style={[styles.description, { color: colors.textSecondary }]}>
             Update your password to keep your account secure.
           </Text>

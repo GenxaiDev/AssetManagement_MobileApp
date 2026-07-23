@@ -31,6 +31,7 @@ import { searchAsset } from "../api/asset";
 import { z } from "zod";
 import { useTheme } from "../context/ThemeContext";
 import AppSidebar from "../components/AppSidebar";
+import AppHeader from "../components/AppHeader";
 import { tokenStorage } from "../utils/storage";
 
 
@@ -118,19 +119,39 @@ export default function IncidentRequestScreen({ navigation, route }) {
     }
   }, [asset]);
 
+  useEffect(() => {
+    if (!authUser) return;
+    setForm((f) => ({
+      ...f,
+      requestedByUserId: authUser.userId || "",
+      requestedByName: authUser.fullName || "",
+      requestedByPhone: authUser.phone || "",
+      requestedByEmail: authUser.companyEmail || "",
+    }));
+  }, [authUser]);
+
   const loadFormData = async () => {
     setLoadingRefData(true);
+    const isLocationManager =
+      authUser?.roleName?.toLowerCase() === "location manager";
+
     const results = await Promise.allSettled([
       getCategories("Incident"),
       getAllLocations(),
-      getAllClients(),
       searchUsers({ employmentStatus: "Active" }),
       getAllAllocations({ allocationStatus: "Active" }),
-      getAllOems(),
-      getAllVendors(),
+      ...(isLocationManager
+        ? [getAllOems(), getAllVendors(), getAllClients()]
+        : []),
     ]);
 
-    const [catRes, locRes, clientRes, userRes, allocRes, oemRes, vendorRes] = results;
+    const catRes = results[0];
+    const locRes = results[1];
+    const userRes = results[2];
+    const allocRes = results[3];
+    const oemRes = isLocationManager ? results[4] : undefined;
+    const vendorRes = isLocationManager ? results[5] : undefined;
+    const clientRes = isLocationManager ? results[6] : undefined;
 
     // Unwraps a settled result, checking BOTH layers:
     // 1. catRes.status — did the HTTP call itself resolve? ("fulfilled"/"rejected", from Promise.allSettled)
@@ -150,11 +171,28 @@ export default function IncidentRequestScreen({ navigation, route }) {
 
     setCategories(unwrap(catRes, "getCategories"));
     setLocations(unwrap(locRes, "getAllLocations"));
-    setClients(unwrap(clientRes, "getAllClients"));
     setUsers(unwrap(userRes, "searchUsers"));
     setAllocations(unwrap(allocRes, "getAllAllocations"));
-    setOems(unwrap(oemRes, "getAllOems"));
-    setVendors(unwrap(vendorRes, "getAllVendors"));
+
+    if (oemRes?.status === "fulfilled") setOems(unwrap(oemRes, "getAllOems"));
+    else if (oemRes)
+      console.error("getAllOems failed:", oemRes.reason?.message || oemRes);
+
+    if (vendorRes?.status === "fulfilled")
+      setVendors(unwrap(vendorRes, "getAllVendors"));
+    else if (vendorRes)
+      console.error(
+        "getAllVendors failed:",
+        vendorRes.reason?.message || vendorRes
+      );
+
+    if (clientRes?.status === "fulfilled")
+      setClients(unwrap(clientRes, "getAllClients"));
+    else if (clientRes)
+      console.error(
+        "getAllClients failed:",
+        clientRes.reason?.message || clientRes
+      );
 
     setLoadingRefData(false);
   };
@@ -340,18 +378,13 @@ export default function IncidentRequestScreen({ navigation, route }) {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <ScrollView style={{ flex: 1 }}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={toggleSidebar} style={styles.collapseButton}>
-            <Ionicons name="menu" size={24} color={colors.accentBlue} />
-          </TouchableOpacity>
-          <View style={styles.headerText}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>Incident Request</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Report an incident for the scanned asset.
-            </Text>
-          </View>
-        </View>
+      <AppHeader
+        title="Incident Request"
+        subtitle="Report an incident for the scanned asset."
+        colors={colors}
+        onMenuPress={toggleSidebar}
+      />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: spacing.md }}>
 
         {/* <View style={[styles.slaBanner, { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.25)" }]}>
           <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
@@ -527,7 +560,7 @@ export default function IncidentRequestScreen({ navigation, route }) {
           </View>
         </View>
 
-        {authUser?.roleName.toLowerCase() == 'location manager' && (
+        {authUser?.roleName?.toLowerCase() === 'location manager' && (
           <>
             {/* Service Provider — same as web: Incident shows Provider Type + Provider, but NOT Assigned To */}
             <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
@@ -736,18 +769,45 @@ export default function IncidentRequestScreen({ navigation, route }) {
               keyExtractor={(item, idx) => String(item.assetId || item.id || idx)}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={[styles.userItem, { borderBottomColor: colors.cardBorder }]}
+                  style={[
+                    styles.userItem,
+                    { borderBottomColor: colors.cardBorder, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+                  ]}
                   onPress={() => selectSearchedAsset(item)}
                 >
-                  <Text style={{ color: colors.textPrimary, fontFamily: typography.fontBodySemiBold }}>
-                    {item.assetCode || item.code || `#${item.assetId || item.id}`}
-                  </Text>
-                  {!!item.assetName && (
-                    <Text style={{ color: colors.textSecondary, fontFamily: typography.fontBody, fontSize: typography.small }}>
-                      {item.assetName}
+                  <View>
+                    <Text
+                      style={{
+                        color: colors.textPrimary,
+                        fontFamily: typography.fontBodySemiBold,
+                      }}
+                    >
+                      {item.assetCode ||
+                        item.code ||
+                        `#${item.assetId || item.id}`}
                     </Text>
-                  )}
-                </TouchableOpacity>
+                    {!!item.assetTypeName && (
+                      <Text
+                        style={{
+                          color: colors.textSecondary,
+                          fontFamily: typography.fontBody,
+                          fontSize: typography.small,
+                        }}
+                      >
+                        {item.assetTypeName}
+                      </Text>
+                    )}
+                    </View>
+                    <Text
+                      style={{
+                        color: colors.textSecondary,
+                        fontFamily: typography.fontBody,
+                        fontSize: typography.small,
+                      }}
+                    >
+                      {item.assetStatus}
+                    </Text>
+                  </TouchableOpacity>
               )}
               ListEmptyComponent={
                 <Text style={{ color: colors.textMuted, textAlign: "center", marginVertical: spacing.md }}>

@@ -16,6 +16,7 @@ import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
 import ThemeToggle from "../components/ThemeToggle";
 import BrandHeader from "../components/BrandHeader";
+import AppHeader from "../components/AppHeader";
 import {
   darkTheme,
   lightTheme,
@@ -40,7 +41,7 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
     try {
       const data = await loginApi(email, password);
-      navigation.replace("AssetRegistration", {
+      navigation.replace("Dashboard", {
         permissions: data.permissions || [],
         user: data,
       });
@@ -54,6 +55,11 @@ export default function LoginScreen({ navigation }) {
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
+
+      {/* <AppHeader
+        title="Login"
+        colors={theme}
+      /> */}
 
       <LinearGradient
         colors={isDark ? ["#0a1426", "#0d1c33", "#0a1426"] : ["#eef1f6", "#e6ecf6", "#eef1f6"]}

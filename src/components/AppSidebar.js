@@ -7,6 +7,7 @@ import ThemeToggle from "./ThemeToggle";
 const SIDEBAR_WIDTH = 260;
 
 const MENU_ITEMS = [
+  { label: "Dashboard", icon: "grid", screen: "Dashboard" },
   { label: "Asset", icon: "cube", screen: "AssetRegistration" },
   { label: "Service Request", icon: "construct", screen: "ServiceRequest" },
   { label: "Incident Request", icon: "warning", screen: "IncidentRequest" },

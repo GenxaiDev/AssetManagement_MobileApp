@@ -16,6 +16,7 @@ import AssetRegistrationScreen from "./src/screens/AssetRegistrationScreen";
 import IncidentRequestScreen from "./src/screens/IncidentRequestScreen";
 import ServiceRequestScreen from "./src/screens/ServiceRequestScreen";
 import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
+import DashboardScreen from "./src/screens/DashboardScreen";
 import { darkTheme } from "./src/theme/colors";
 
 const Stack = createNativeStackNavigator();
@@ -57,6 +58,7 @@ function AppContent() {
           <Stack.Screen name="IncidentRequest" component={IncidentRequestScreen} />
           <Stack.Screen name="ServiceRequest" component={ServiceRequestScreen} />
           <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+          <Stack.Screen name="Dashboard" component={DashboardScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
