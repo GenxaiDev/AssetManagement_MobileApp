@@ -1,7 +1,9 @@
 import axios from "axios";
 import { tokenStorage } from "../utils/storage";
 
-const API_BASE_URL = "https://uatassetapi.genxai.com/api";
+// const API_BASE_URL = "https://uatassetapi.genxai.com/api";
+const API_BASE_URL = "https://localhost:5010/api";
+
 
 export const client = axios.create({
   baseURL: API_BASE_URL,
@@ -55,6 +57,7 @@ client.interceptors.response.use(
     return response;
   },
   async (error) => {
+    console.log("error", error);
     const originalRequest = error.config;
 
     if (

@@ -27,6 +27,8 @@ export default function AppSidebar({
   isDark,
   toggleTheme,
   contextTheme,
+  onNotificationPress,
+  unreadCount,
 }) {
   const handleMenuPress = (screen) => {
     if (screen === route.name) return;
@@ -66,7 +68,7 @@ export default function AppSidebar({
     >
       <View style={styles.sidebarHeader}>
         <View style={styles.sidebarHeaderRow}>
-          <Text style={[styles.sidebarTitle, { color: colors.textPrimary }]}>Menu</Text>
+          <Text style={[styles.sidebarTitle, { color: colors.textPrimary }]}>Menu</Text>  
           <TouchableOpacity onPress={closeSidebar} style={styles.sidebarCloseButton}>
             <Ionicons name="close" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
@@ -105,9 +107,14 @@ export default function AppSidebar({
                   {roleName}
                 </Text>
               </View>
-          </View>
-          <View style={{ flex: 1, alignItems: "flex-end" }}>
-            <ThemeToggle isDark={isDark} theme={contextTheme} onPress={toggleTheme} />
+              <TouchableOpacity onPress={onNotificationPress} style={styles.sidebarNotificationButton}>
+                <Ionicons name="notifications" size={28} color={colors.accentBlue} />
+                {unreadCount > 0 && (
+                  <View style={[styles.notificationBadge, { backgroundColor: colors.danger }]}>
+                    <Text style={[styles.notificationBadgeText,{color: colors.textPrimary}]}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
           </View>
         </View>
 
@@ -117,8 +124,13 @@ export default function AppSidebar({
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.sidebarItem]} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={22} color={colors.textSecondary} style={styles.sidebarIcon} />
-            <Text style={[styles.sidebarLabel, { color: colors.textSecondary }]}>Logout</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+            <View style={{flexDirection: "row", alignItems: "center"}}>
+              <Ionicons name="log-out-outline" size={22} color={colors.textSecondary} style={styles.sidebarIcon} />
+              <Text style={[styles.sidebarLabel, { color: colors.textSecondary }]}>Logout</Text>
+            </View>
+            <ThemeToggle isDark={isDark} theme={contextTheme} onPress={toggleTheme} />
+          </View>
         </TouchableOpacity>
       </View>
     </Animated.View>
@@ -154,6 +166,26 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
     marginLeft: spacing.sm,
   },
+  sidebarNotificationButton: {
+    padding: spacing.sm,
+    position: "relative",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 14,
+  },
   sidebarMenu: {},
   sidebarItem: {
     flexDirection: "row",
@@ -184,10 +216,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   userSection: {
-    flexDirection: "row",
-    alignItems: "center",
     padding: spacing.lg,
-    gap: spacing.md,
   },
   userAvatar: {
     width: 30,

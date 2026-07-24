@@ -28,11 +28,13 @@ import {
   createIncidentRequest,
 } from "../api/request";
 import { searchAsset } from "../api/asset";
+import { getUnreadNotificationCount } from "../api/notification";
 import { z } from "zod";
 import { useTheme } from "../context/ThemeContext";
 import AppSidebar from "../components/AppSidebar";
 import AppHeader from "../components/AppHeader";
 import { tokenStorage } from "../utils/storage";
+import NotificationModal from "../components/NotificationModal";
 
 
 const SIDEBAR_WIDTH = 260;
@@ -100,6 +102,8 @@ export default function IncidentRequestScreen({ navigation, route }) {
   const [assetSearchResults, setAssetSearchResults] = useState([]);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const isAnimating = useRef(false);
 
@@ -359,6 +363,9 @@ export default function IncidentRequestScreen({ navigation, route }) {
     }).start(() => {
       setSidebarOpen(!sidebarOpen);
       isAnimating.current = false;
+      if (!sidebarOpen) {
+        loadUnreadCount();
+      }
     });
   };
 
@@ -374,6 +381,19 @@ export default function IncidentRequestScreen({ navigation, route }) {
       setSidebarOpen(false);
       isAnimating.current = false;
     });
+  };
+
+  const loadUnreadCount = async () => {
+    try {
+      const res = await getUnreadNotificationCount();
+      setUnreadCount(res?.data?.unreadCount ?? 0);
+    } catch (err) {
+      console.error("Unread count fetch failed:", err);
+    }
+  };
+
+  const handleNotificationPress = () => {
+    setShowNotifications(true);
   };
 
   return (
@@ -836,6 +856,16 @@ export default function IncidentRequestScreen({ navigation, route }) {
         isDark={isDark}
         toggleTheme={toggleTheme}
         contextTheme={theme}
+      onNotificationPress={handleNotificationPress}
+        unreadCount={unreadCount}
+      />
+      <NotificationModal
+        visible={showNotifications}
+        onClose={() => {
+          setShowNotifications(false);
+          loadUnreadCount();
+        }}
+        colors={colors}
       />
     </View>
   );

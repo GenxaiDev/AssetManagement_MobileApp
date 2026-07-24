@@ -5,8 +5,10 @@ import { darkTheme } from "../theme/colors";
 import { spacing, radius, typography } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { getDashboardStats } from "../api/dashboard";
+import { getUnreadNotificationCount } from "../api/notification";
 import AppSidebar from "../components/AppSidebar";
 import AppHeader from "../components/AppHeader";
+import NotificationModal from "../components/NotificationModal";
 
 const SIDEBAR_WIDTH = 260;
 
@@ -16,6 +18,8 @@ export default function DashboardScreen({ navigation, route }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const isAnimating = useRef(false);
 
@@ -32,6 +36,15 @@ export default function DashboardScreen({ navigation, route }) {
       console.error("Dashboard stats fetch failed:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadUnreadCount = async () => {
+    try {
+      const res = await getUnreadNotificationCount();
+      setUnreadCount(res?.data?.unreadCount ?? 0);
+    } catch (err) {
+      console.error("Unread count fetch failed:", err);
     }
   };
 
@@ -55,6 +68,9 @@ export default function DashboardScreen({ navigation, route }) {
     }).start(() => {
       setSidebarOpen(!sidebarOpen);
       isAnimating.current = false;
+      if (!sidebarOpen) {
+        loadUnreadCount();
+      }
     });
   };
 
@@ -70,6 +86,10 @@ export default function DashboardScreen({ navigation, route }) {
       setSidebarOpen(false);
       isAnimating.current = false;
     });
+  };
+
+  const handleNotificationPress = () => {
+    setShowNotifications(true);
   };
 
   if (loading) {
@@ -206,25 +226,35 @@ export default function DashboardScreen({ navigation, route }) {
         onPress={closeSidebar}
       />
     )}
-    <AppSidebar
-      colors={colors}
-      sidebarOpen={sidebarOpen}
-      slideAnim={slideAnim}
-      isAnimating={isAnimating}
-      toggleSidebar={toggleSidebar}
-      closeSidebar={closeSidebar}
-      navigation={navigation}
-      route={route}
-      username={
-        route?.params?.user?.name || route?.params?.user?.email || "User"
-      }
-      roleName={
-        route?.params?.user?.roleName || route?.params?.user?.role || "User"
-      }
-      isDark={isDark}
-      toggleTheme={toggleTheme}
-      contextTheme={theme}
-    />
+      <AppSidebar
+        colors={colors}
+        sidebarOpen={sidebarOpen}
+        slideAnim={slideAnim}
+        isAnimating={isAnimating}
+        toggleSidebar={toggleSidebar}
+        closeSidebar={closeSidebar}
+        navigation={navigation}
+        route={route}
+        username={
+          route?.params?.user?.name || route?.params?.user?.email || "User"
+        }
+        roleName={
+          route?.params?.user?.roleName || route?.params?.user?.role || "User"
+        }
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+        contextTheme={theme}
+        onNotificationPress={handleNotificationPress}
+        unreadCount={unreadCount}
+      />
+      <NotificationModal
+        visible={showNotifications}
+        onClose={() => {
+          setShowNotifications(false);
+          loadUnreadCount();
+        }}
+        colors={colors}
+      />
     </View>
   );
 }
