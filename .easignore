@@ -1,7 +1,51 @@
-node_modules/**/*
-.expo/**/*
-.git/**/*
-android/build/**/*
-android/app/build/**/*
+# .easignore — controls what's uploaded to EAS build servers
+# (does NOT reduce final APK size — that's a native/architecture issue in eas.json)
+
+# Dependencies — EAS reinstalls these fresh on their servers
+node_modules
+
+# Version control
+.git
+.gitignore
+
+# Environment/secrets — never upload these
+.env
+.env.local
+.env.*.local
+
+# Expo/Metro caches
+.expo
+.expo-shared
+node_modules/.cache
+
+# Static export output — not needed for a native build upload
+dist
+
+# Build outputs from previous local builds
+android
+ios
+*.apk
+*.aab
+*.ipa
+
+# Editor/OS files
+.vscode
+.idea
 *.log
 .DS_Store
+Thumbs.db
+
+# Docs and non-essential project files
+README.md
+*.md
+docs
+
+# Test files
+__tests__
+*.test.js
+*.spec.js
+coverage
+
+# Misc
+*.orig.*
+web-build

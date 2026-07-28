@@ -482,7 +482,7 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
               Affected Asset (optional)
             </Text>
 
-            {form.requestedByUserId ? (
+            {/* {form.requestedByUserId ? (
               <View
                 style={[
                   styles.pickerWrap,
@@ -515,7 +515,7 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
                   ))}
                 </Picker>
               </View>
-            ) : (
+            ) : ( */}
               <TouchableOpacity
                 style={[
                   styles.pickerWrap,
@@ -541,7 +541,7 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
                     : "Search asset by code…"}
                 </Text>
               </TouchableOpacity>
-            )}
+            {/* )} */}
             {errors.assetId && (
               <Text style={styles.errorText}>{errors.assetId}</Text>
             )}

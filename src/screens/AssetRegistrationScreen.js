@@ -89,7 +89,8 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
     setLoadingAsset(true);
     try {
       const asset = await searchAsset(data);
-      setAssetDetails(asset);
+      console.log("asset--------------", asset)
+      setAssetDetails(asset[0]);
       setShowAssetModal(true);
     } catch (err) {
       Alert.alert("Error", "Asset not found for this QR code.");
@@ -106,7 +107,7 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
     setLoadingAsset(true);
     try {
       const asset = await searchAsset(manualCode.trim());
-      setAssetDetails(asset);
+      setAssetDetails(asset[0]);
       setShowAssetModal(true);
       setManualCode("");
     } catch (err) {
@@ -147,7 +148,7 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
             </View>
             {assetDetails ? (
               <View style={styles.modalBody}>
-                <Text style={[styles.detailText, { color: colors.textPrimary }]}>Asset ID: {assetDetails.assetId}</Text>
+                <Text style={[styles.detailText, { color: colors.textPrimary }]}>Asset Code: {assetDetails.assetCode}</Text>
                 <Text style={[styles.detailText, { color: colors.textSecondary }]}>Type: {assetDetails.assetTypeName || "N/A"}</Text>
                 <Text style={[styles.detailText, { color: colors.textSecondary }]}>Status: {assetDetails.assetStatus || "N/A"}</Text>
                 <Text style={[styles.detailText, { color: colors.textSecondary }]}>Location: {assetDetails.currentLocation || "N/A"}</Text>
