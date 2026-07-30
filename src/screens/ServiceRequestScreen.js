@@ -35,6 +35,7 @@ import AppSidebar from "../components/AppSidebar";
 import AppHeader from "../components/AppHeader";
 import { tokenStorage } from "../utils/storage";
 import NotificationModal from "../components/NotificationModal";
+import { signalRService } from "../services/signalRService";
 
 const SIDEBAR_WIDTH = 260;
 
@@ -141,6 +142,21 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
       setAuthUser(data);
     };
     loadAuth();
+  }, []);
+
+  useEffect(() => {
+    const handler = (data) => {
+      console.log("📬 SeedStatus:", data);
+      const message = data.message || `${data.type} ${data.status}`;
+      onShowToast?.({ message, suppressGeneric: !!data.nofUnread });
+      if (data.nofUnread !== undefined) {
+        setUnreadCount(data.nofUnread);
+      }
+    };
+    signalRService.on("ReceiveNotification", handler);
+    return () => {
+      signalRService.off("ReceiveNotification", handler);
+    };
   }, []);
 
   useEffect(() => {

@@ -27,12 +27,12 @@ export const tokenStorage = {
 
   async getAuthData() {
     try {
-      const token = await SecureStore.getItemAsync(AUTH_DATA_KEY);
-      if (!token) return null;
+      const authData = await SecureStore.getItemAsync(AUTH_DATA_KEY);
+      if (!authData) return null;
       try {
-        return JSON.parse(token);
+        return JSON.parse(authData);
       } catch {
-        return token;
+        return authData;
       }
     } catch (error) {
       console.error("Error getting auth data:", error);

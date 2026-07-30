@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated } from "
 import { Ionicons } from "@expo/vector-icons";
 import { spacing, radius, typography } from "../theme/colors";
 import ThemeToggle from "./ThemeToggle";
+import { signalRService } from "../services/signalRService";
 
 const SIDEBAR_WIDTH = 260;
 
@@ -43,6 +44,7 @@ export default function AppSidebar({
 
   const handleLogout = () => {
     closeSidebar();
+    signalRService.stop();
     setTimeout(() => {
       navigation.replace("Login");
     }, 260);

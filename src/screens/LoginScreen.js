@@ -24,6 +24,7 @@ import {
 import { styles } from "./LoginScreen.styles";
 import { login as loginApi } from "../api/auth/login";
 import { useTheme } from "../context/ThemeContext";
+import { signalRService } from "../services/signalRService";
 
 export default function LoginScreen({ navigation }) {
   const { isDark, theme, toggleTheme } = useTheme();
@@ -41,6 +42,7 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
     try {
       const data = await loginApi(email, password);
+      signalRService.start();
       navigation.replace("Dashboard", {
         permissions: data.permissions || [],
         user: data,

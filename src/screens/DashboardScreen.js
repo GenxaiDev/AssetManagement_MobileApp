@@ -9,6 +9,7 @@ import { getUnreadNotificationCount } from "../api/notification";
 import AppSidebar from "../components/AppSidebar";
 import AppHeader from "../components/AppHeader";
 import NotificationModal from "../components/NotificationModal";
+import { signalRService } from "../services/signalRService";
 
 const SIDEBAR_WIDTH = 260;
 
@@ -25,6 +26,21 @@ export default function DashboardScreen({ navigation, route }) {
 
   useEffect(() => {
     loadStats();
+  }, []);
+
+  useEffect(() => {
+    const handler = (data) => {
+      console.log("📬 SeedStatus:", data);
+      const message = data.message || `${data.type} ${data.status}`;
+      onShowToast?.({ message, suppressGeneric: !!data.nofUnread });
+      if (data.nofUnread !== undefined) {
+        setUnreadCount(data.nofUnread);
+      }
+    };
+    signalRService.on("ReceiveNotification", handler);
+    return () => {
+      signalRService.off("ReceiveNotification", handler);
+    };
   }, []);
 
   const loadStats = async () => {
