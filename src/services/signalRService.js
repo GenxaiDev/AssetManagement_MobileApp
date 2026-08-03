@@ -106,7 +106,8 @@ async function getUserId() {
 
 export const signalRService = {
   async start() {
-    if (connecting || started) return;
+    if (started) return;
+    if (connecting) return;
     connecting = true;
 
     try {
@@ -119,29 +120,25 @@ export const signalRService = {
       }
 
       if (conn.state === signalR.HubConnectionState.Disconnected) {
-        conn
-          .start()
-          .then(async () => {
-            const userId = await getUserId();
-            if (userId) {
-              conn.invoke("JoinUserGroup", userId).catch(() => {});
-            }
-            started = true;
-            connecting = false;
-          })
-          .catch(() => {
-            started = false;
-            connecting = false;
-            setTimeout(() => {
-              started = false;
-              connecting = false;
-            }, 5000);
-          });
+        try {
+          await conn.start();
+          const userId = await getUserId();
+          if (userId) {
+            conn.invoke("JoinUserGroup", userId).catch(() => {});
+          }
+          started = true;
+        } catch (err) {
+          console.warn("SignalR start error:", err.message || err);
+          started = false;
+        } finally {
+          connecting = false;
+        }
       } else {
         started = true;
         connecting = false;
       }
-    } catch {
+    } catch (err) {
+      console.warn("SignalR initialization error:", err.message || err);
       connecting = false;
     }
   },

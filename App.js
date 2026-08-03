@@ -1,5 +1,5 @@
-import React from "react";
-import { View, ActivityIndicator } from "react-native";
+import React, { useEffect } from "react";
+import { View, ActivityIndicator, Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -18,6 +18,7 @@ import ServiceRequestScreen from "./src/screens/ServiceRequestScreen";
 import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
 import { darkTheme } from "./src/theme/colors";
+import { notificationService } from "./src/services/notificationService";
 
 const Stack = createNativeStackNavigator();
 
@@ -32,6 +33,13 @@ function AppContent() {
     DMSans_500Medium,
     DMSans_600SemiBold,
   });
+
+  useEffect(() => {
+    notificationService.addNotificationListeners();
+    return () => {
+      notificationService.removeNotificationListeners();
+    };
+  }, []);
 
   if (!fontsLoaded || loading) {
     return (
@@ -49,7 +57,7 @@ function AppContent() {
   }
 
   return (
-    <SafeAreaProvider style={{ flex: 1 }}>
+    <SafeAreaProvider style={{ flex: 1, marginTop: Platform.OS === "android" ? 25 : 0, marginBottom: Platform.OS === "android" ? 35 : 0 }}>
       <NavigationContainer>
         <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Login" component={LoginScreen} />

@@ -25,6 +25,7 @@ import { styles } from "./LoginScreen.styles";
 import { login as loginApi } from "../api/auth/login";
 import { useTheme } from "../context/ThemeContext";
 import { signalRService } from "../services/signalRService";
+import { notificationService } from "../services/notificationService";
 
 export default function LoginScreen({ navigation }) {
   const { isDark, theme, toggleTheme } = useTheme();
@@ -42,7 +43,13 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
     try {
       const data = await loginApi(email, password);
-      signalRService.start();
+
+      // Trigger background services asynchronously so screen navigation is immediate & resilient
+      Promise.allSettled([
+        signalRService.start(),
+        notificationService.registerDeviceWithBackend(),
+      ]).catch((e) => console.warn("Background services initialization error:", e));
+
       navigation.replace("Dashboard", {
         permissions: data.permissions || [],
         user: data,

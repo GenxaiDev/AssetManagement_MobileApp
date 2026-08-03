@@ -15,3 +15,10 @@ export const getUnreadNotificationCount = async () =>
 // POST /api/Notification/{id}/read
 export const markNotificationAsRead = async (id) =>
   await client.post(`/Notification/${id}/read`);
+
+// POST /api/Notification/register-device
+export const registerDevice = async (deviceToken, platform) =>
+  await client.post("/Notification/register-device", {
+    deviceToken,
+    platform,
+  });
