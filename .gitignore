@@ -2,3 +2,4 @@ node_modules
 android
 dist
 .expo
+google-services.json
