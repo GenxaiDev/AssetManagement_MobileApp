@@ -300,7 +300,6 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    paddingVertical: spacing.sm,
   },
   header: {
     flexDirection: "row",

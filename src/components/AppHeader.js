@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { spacing, typography } from "../theme/colors";
 
@@ -10,12 +11,22 @@ export default function AppHeader({
   onMenuPress,
   onBackPress,
 }) {
+  const insets = useSafeAreaInsets();
   const isMenu = !!onMenuPress;
   const leftIcon = isMenu ? "menu" : "chevron-back";
   const onLeftPress = isMenu ? onMenuPress : onBackPress;
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background, borderBottomColor: colors.cardBorder }]}>
+    <View
+      style={[
+        styles.root,
+        {
+          backgroundColor: colors.background,
+          borderBottomColor: colors.cardBorder,
+          paddingTop: Math.max(insets.top, spacing.lg),
+        },
+      ]}
+    >
       <TouchableOpacity
         onPress={onLeftPress}
         style={styles.iconButton}

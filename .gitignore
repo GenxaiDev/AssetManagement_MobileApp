@@ -1,5 +1,7 @@
 node_modules
 android
 dist
-.expo
+.expo/
+.expo-shared
+devices.json
 google-services.json

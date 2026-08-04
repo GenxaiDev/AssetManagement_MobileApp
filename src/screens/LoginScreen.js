@@ -79,7 +79,8 @@ export default function LoginScreen({ navigation }) {
       <View style={[styles.glow, styles.glowTop]} pointerEvents="none" />
       <View style={[styles.glow, styles.glowBottom]} pointerEvents="none" />
 
-      <View style={styles.toggleWrap}>
+      <View style={styles.topHeaderBar}>
+        <BrandHeader theme={theme} size="md" />
         <ThemeToggle
           isDark={isDark}
           theme={theme}
@@ -89,15 +90,14 @@ export default function LoginScreen({ navigation }) {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <BrandHeader theme={theme} size="lg" />
-
           <Text style={[styles.heroTitle, { color: theme.textPrimary }]}>
             Asset Management  <Text style={[styles.heroTitle, { color: theme.accentBlue }]}>
             Portal

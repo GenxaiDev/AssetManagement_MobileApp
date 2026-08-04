@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { spacing, radius, typography } from "../theme/colors";
 import ThemeToggle from "./ThemeToggle";
@@ -31,6 +32,8 @@ export default function AppSidebar({
   onNotificationPress,
   unreadCount,
 }) {
+  const insets = useSafeAreaInsets();
+
   const handleMenuPress = (screen) => {
     if (screen === route.name) return;
     closeSidebar();
@@ -64,6 +67,8 @@ export default function AppSidebar({
         {
           backgroundColor: colors.cardBackground,
           borderColor: colors.cardBorder,
+          paddingTop: Math.max(insets.top, spacing.sm),
+          paddingBottom: Math.max(insets.bottom, spacing.md),
           transform: [{ translateX: slideAnim }],
         },
       ]}
@@ -125,7 +130,7 @@ export default function AppSidebar({
           <Text style={[styles.sidebarLabel, { color: colors.textSecondary }]}>Change Password</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.sidebarItem]} onPress={handleLogout}>
+        <TouchableOpacity style={[styles.sidebarBottomItem]} onPress={handleLogout}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
             <View style={{flexDirection: "row", alignItems: "center"}}>
               <Ionicons name="log-out-outline" size={22} color={colors.textSecondary} style={styles.sidebarIcon} />
@@ -151,7 +156,8 @@ const styles = StyleSheet.create({
     flexDirection: "column",
   },
   sidebarHeader: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
   },
   sidebarHeaderRow: {
@@ -195,6 +201,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     borderBottomWidth: 1,
+  },
+  sidebarBottomItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 0,
   },
   sidebarIcon: {
     marginRight: spacing.md,

@@ -57,7 +57,7 @@ function AppContent() {
   }
 
   return (
-    <SafeAreaProvider style={{ flex: 1, marginTop: Platform.OS === "android" ? 25 : 0, marginBottom: Platform.OS === "android" ? 35 : 0 }}>
+    <SafeAreaProvider style={{ flex: 1 }}>
       <NavigationContainer>
         <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Login" component={LoginScreen} />

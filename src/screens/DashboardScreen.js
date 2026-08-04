@@ -278,7 +278,6 @@ export default function DashboardScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    paddingTop: spacing.sm
   },
   header: {
     padding: spacing.lg,
