@@ -10,6 +10,7 @@ import {
   DMSans_600SemiBold,
 } from "@expo-google-fonts/dm-sans";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
+import { NotificationProvider } from "./src/context/NotificationContext";
 import LoginScreen from "./src/screens/LoginScreen";
 import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
 import AssetRegistrationScreen from "./src/screens/AssetRegistrationScreen";
@@ -76,7 +77,9 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <NotificationProvider>
+        <AppContent />
+      </NotificationProvider>
     </ThemeProvider>
   );
 }

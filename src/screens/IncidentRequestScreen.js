@@ -28,14 +28,13 @@ import {
   createIncidentRequest,
 } from "../api/request";
 import { searchAsset } from "../api/asset";
-import { getUnreadNotificationCount } from "../api/notification";
 import { z } from "zod";
 import { useTheme } from "../context/ThemeContext";
 import AppSidebar from "../components/AppSidebar";
 import AppHeader from "../components/AppHeader";
 import { tokenStorage } from "../utils/storage";
 import NotificationModal from "../components/NotificationModal";
-import { signalRService } from "../services/signalRService";
+import { useNotifications } from "../context/NotificationContext";
 
 
 const SIDEBAR_WIDTH = 260;
@@ -103,37 +102,22 @@ export default function IncidentRequestScreen({ navigation, route }) {
   const [assetSearchResults, setAssetSearchResults] = useState([]);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
-  const isAnimating = useRef(false);
+   const [showNotifications, setShowNotifications] = useState(false);
+   const { refreshUnreadCount } = useNotifications();
+   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
+   const isAnimating = useRef(false);
 
-  useEffect(() => {
-    loadFormData();
-    const loadAuth = async () => {
-      const data = await tokenStorage.getAuthData();
-      setAuthUser(data);
-    };
-    loadAuth();
-  }, []);
+   useEffect(() => {
+     loadFormData();
+     const loadAuth = async () => {
+       const data = await tokenStorage.getAuthData();
+       setAuthUser(data);
+     };
+     loadAuth();
+   }, []);
 
-  useEffect(() => {
-    const handler = (data) => {
-      console.log("📬 SeedStatus:", data);
-      const message = data.message || `${data.type} ${data.status}`;
-      onShowToast?.({ message, suppressGeneric: !!data.nofUnread });
-      if (data.nofUnread !== undefined) {
-        setUnreadCount(data.nofUnread);
-      }
-    };
-    signalRService.on("ReceiveNotification", handler);
-    return () => {
-      signalRService.off("ReceiveNotification", handler);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (asset) {
+   useEffect(() => {
+     if (asset) {
       setForm((f) => ({ ...f, assetId: asset.id || asset.assetId || "" }));
       setAssetDetail(asset);
     }
@@ -380,7 +364,7 @@ export default function IncidentRequestScreen({ navigation, route }) {
       setSidebarOpen(!sidebarOpen);
       isAnimating.current = false;
       if (!sidebarOpen) {
-        loadUnreadCount();
+        refreshUnreadCount();
       }
     });
   };
@@ -397,18 +381,9 @@ export default function IncidentRequestScreen({ navigation, route }) {
       setSidebarOpen(false);
       isAnimating.current = false;
     });
-  };
+   };
 
-  const loadUnreadCount = async () => {
-    try {
-      const res = await getUnreadNotificationCount();
-      setUnreadCount(res?.data?.unreadCount ?? 0);
-    } catch (err) {
-      console.error("Unread count fetch failed:", err);
-    }
-  };
-
-  const handleNotificationPress = () => {
+   const handleNotificationPress = () => {
     setShowNotifications(true);
   };
 
@@ -873,13 +848,12 @@ export default function IncidentRequestScreen({ navigation, route }) {
         toggleTheme={toggleTheme}
         contextTheme={theme}
       onNotificationPress={handleNotificationPress}
-        unreadCount={unreadCount}
       />
       <NotificationModal
         visible={showNotifications}
         onClose={() => {
           setShowNotifications(false);
-          loadUnreadCount();
+          refreshUnreadCount();
         }}
         colors={colors}
       />

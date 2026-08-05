@@ -8,14 +8,9 @@
     "backgroundColor": "#FFFFFF",
     "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/splash-light.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF",
-      "dark": {
-        "image": "./assets/splash-light.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#0B1F3A"
-      }
+      "image": "./assets/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true
@@ -23,6 +18,10 @@
     "android": {
       "package": "com.trusha_kyada.genxassetapp",
       "googleServicesFile": "./google-services.json",
+      "notification": {
+        "icon": "./assets/notification-icon.png",
+        "color": "#2E8B3A"
+      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B1F3A"

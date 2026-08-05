@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Modal, TextInput, Animated } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Modal, TextInput, Animated, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
 import { darkTheme, lightTheme } from "../theme/colors";
 import { spacing, radius, typography } from "../theme/colors";
 import { getAssetById, searchAsset } from "../api/asset";
-import { getUnreadNotificationCount } from "../api/notification";
 import { useTheme } from "../context/ThemeContext";
 import AppSidebar from "../components/AppSidebar";
 import AppHeader from "../components/AppHeader";
 import NotificationModal from "../components/NotificationModal";
-import { signalRService } from "../services/signalRService";
+import { useNotifications } from "../context/NotificationContext";
 
 const SIDEBAR_WIDTH = 260;
 
@@ -24,35 +23,21 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
   const [loadingAsset, setLoadingAsset] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
-  const isAnimating = useRef(false);
+   const [showNotifications, setShowNotifications] = useState(false);
+   const { refreshUnreadCount } = useNotifications();
+   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
+   const isAnimating = useRef(false);
 
-  const user = route?.params?.user || {};
-  const username = user.name || user.email || "User";
-  const roleName = user.roleName || user.role || "User";
+   const user = route?.params?.user || {};
+   const username = user.name || user.email || "User";
+   const roleName = user.roleName || user.role || "User";
 
-  useEffect(() => {
-    if (!permission) {
-      requestPermission();
-    }
-  }, [permission, requestPermission]);
+   useEffect(() => {
+     if (!permission) {
+       requestPermission();
+     }
+   }, [permission, requestPermission]);
 
-  useEffect(() => {
-    const handler = (data) => {
-      console.log("📬 SeedStatus:", data);
-      const message = data.message || `${data.type} ${data.status}`;
-      onShowToast?.({ message, suppressGeneric: !!data.nofUnread });
-      if (data.nofUnread !== undefined) {
-        setUnreadCount(data.nofUnread);
-      }
-    };
-    signalRService.on("ReceiveNotification", handler);
-    return () => {
-      signalRService.off("ReceiveNotification", handler);
-    };
-  }, []);
 
   const toggleSidebar = () => {
     if (isAnimating.current) return;
@@ -66,7 +51,7 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
       setSidebarOpen(!sidebarOpen);
       isAnimating.current = false;
       if (!sidebarOpen) {
-        loadUnreadCount();
+        refreshUnreadCount();
       }
     });
   };
@@ -85,16 +70,7 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
     });
   };
 
-  const loadUnreadCount = async () => {
-    try {
-      const res = await getUnreadNotificationCount();
-      setUnreadCount(res?.data?.unreadCount ?? 0);
-    } catch (err) {
-      console.error("Unread count fetch failed:", err);
-    }
-  };
-
-  const handleNotificationPress = () => {
+   const handleNotificationPress = () => {
     setShowNotifications(true);
   };
 
@@ -223,46 +199,59 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
         onMenuPress={toggleSidebar}
       />
 
-      <View style={styles.scannerContainer}>
-        <CameraView
-          facing="back"
-          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-          barcodeScannerSettings={{
-            barcodeTypes: ["qr"],
-          }}
-          style={styles.camera}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: spacing.sm }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <View style={styles.scannerOverlay}>
-            <View style={styles.scanFrame} />
+          <View style={styles.scannerContainer}>
+            <CameraView
+              facing="back"
+              onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+              barcodeScannerSettings={{
+                barcodeTypes: ["qr"],
+              }}
+              style={styles.camera}
+            >
+              <View style={styles.scannerOverlay}>
+                <View style={styles.scanFrame} />
+              </View>
+            </CameraView>
+            {scanned && (
+              <TouchableOpacity style={styles.rescanButton} onPress={() => setScanned(false)}>
+                <Ionicons name="refresh" size={20} color="#FFFFFF" />
+                <Text style={styles.rescanText}>Scan Again</Text>
+              </TouchableOpacity>
+            )}
           </View>
-        </CameraView>
-        {scanned && (
-          <TouchableOpacity style={styles.rescanButton} onPress={() => setScanned(false)}>
-            <Ionicons name="refresh" size={20} color="#FFFFFF" />
-            <Text style={styles.rescanText}>Scan Again</Text>
-          </TouchableOpacity>
-        )}
-      </View>
 
-      <View style={styles.manualSection}>
-        <Text style={[styles.manualLabel, { color: colors.textMuted }]}>OR ENTER ASSET CODE MANUALLY</Text>
-        <View style={styles.manualRow}>
-          <TextInput
-            style={[styles.manualInput, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.textPrimary }]}
-            placeholder="Asset Code / QR Data"
-            placeholderTextColor={colors.placeholder}
-            value={manualCode}
-            onChangeText={setManualCode}
-          />
-          <TouchableOpacity
-            style={[styles.manualButton, { backgroundColor: colors.accentBlue }]}
-            onPress={handleManualSearch}
-            disabled={loadingAsset}
-          >
-            <Ionicons name="search" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      </View>
+          <View style={styles.manualSection}>
+            <Text style={[styles.manualLabel, { color: colors.textMuted }]}>OR ENTER ASSET CODE MANUALLY</Text>
+            <View style={styles.manualRow}>
+              <TextInput
+                style={[styles.manualInput, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.textPrimary }]}
+                placeholder="Asset Code / QR Data"
+                placeholderTextColor={colors.placeholder}
+                value={manualCode}
+                onChangeText={setManualCode}
+              />
+              <TouchableOpacity
+                style={[styles.manualButton, { backgroundColor: colors.accentBlue }]}
+                onPress={handleManualSearch}
+                disabled={loadingAsset}
+              >
+                <Ionicons name="search" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {sidebarOpen && (
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={closeSidebar} />
@@ -282,13 +271,12 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
         toggleTheme={toggleTheme}
         contextTheme={contextTheme}
       onNotificationPress={handleNotificationPress}
-        unreadCount={unreadCount}
       />
       <NotificationModal
         visible={showNotifications}
         onClose={() => {
           setShowNotifications(false);
-          loadUnreadCount();
+        refreshUnreadCount();
         }}
         colors={colors}
       />
@@ -326,6 +314,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   scannerContainer: {
+    minHeight: 320,
     flex: 1,
     marginHorizontal: spacing.lg,
     paddingVertical: spacing.md,
@@ -343,8 +332,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   scanFrame: {
-    width: 250,
-    height: 250,
+    width: 230,
+    height: 230,
     borderWidth: 2,
     borderColor: "#FFFFFF",
     borderRadius: radius.md,
@@ -369,6 +358,7 @@ const styles = StyleSheet.create({
   manualSection: {
     padding: spacing.lg,
     paddingTop: spacing.md,
+    paddingBottom: spacing.md,
   },
   manualLabel: {
     fontFamily: typography.fontBodySemiBold,

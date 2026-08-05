@@ -5,11 +5,10 @@ import { darkTheme } from "../theme/colors";
 import { spacing, radius, typography } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { getDashboardStats } from "../api/dashboard";
-import { getUnreadNotificationCount } from "../api/notification";
 import AppSidebar from "../components/AppSidebar";
 import AppHeader from "../components/AppHeader";
 import NotificationModal from "../components/NotificationModal";
-import { signalRService } from "../services/signalRService";
+import { useNotifications } from "../context/NotificationContext";
 
 const SIDEBAR_WIDTH = 260;
 
@@ -18,53 +17,29 @@ export default function DashboardScreen({ navigation, route }) {
   const colors = theme;
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+   const [sidebarOpen, setSidebarOpen] = useState(false);
+   const [showNotifications, setShowNotifications] = useState(false);
+   const { refreshUnreadCount } = useNotifications();
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const isAnimating = useRef(false);
 
-  useEffect(() => {
-    loadStats();
-  }, []);
+   useEffect(() => {
+     loadStats();
+   }, []);
 
-  useEffect(() => {
-    const handler = (data) => {
-      console.log("📬 SeedStatus:", data);
-      const message = data.message || `${data.type} ${data.status}`;
-      onShowToast?.({ message, suppressGeneric: !!data.nofUnread });
-      if (data.nofUnread !== undefined) {
-        setUnreadCount(data.nofUnread);
-      }
-    };
-    signalRService.on("ReceiveNotification", handler);
-    return () => {
-      signalRService.off("ReceiveNotification", handler);
-    };
-  }, []);
+   const loadStats = async () => {
+     setLoading(true);
+     try {
+       const res = await getDashboardStats();
+       setStats(res?.data?.data || res?.data || res);
+     } catch (err) {
+       console.error("Dashboard stats fetch failed:", err);
+     } finally {
+       setLoading(false);
+     }
+   };
 
-  const loadStats = async () => {
-    setLoading(true);
-    try {
-      const res = await getDashboardStats();
-      setStats(res?.data?.data || res?.data || res);
-    } catch (err) {
-      console.error("Dashboard stats fetch failed:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadUnreadCount = async () => {
-    try {
-      const res = await getUnreadNotificationCount();
-      setUnreadCount(res?.data?.unreadCount ?? 0);
-    } catch (err) {
-      console.error("Unread count fetch failed:", err);
-    }
-  };
-
-  const formatCurrency = (value) => {
+   const formatCurrency = (value) => {
     if (value == null) return "₹0.00";
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -85,7 +60,7 @@ export default function DashboardScreen({ navigation, route }) {
       setSidebarOpen(!sidebarOpen);
       isAnimating.current = false;
       if (!sidebarOpen) {
-        loadUnreadCount();
+        refreshUnreadCount();
       }
     });
   };
@@ -261,13 +236,12 @@ export default function DashboardScreen({ navigation, route }) {
         toggleTheme={toggleTheme}
         contextTheme={theme}
         onNotificationPress={handleNotificationPress}
-        unreadCount={unreadCount}
       />
       <NotificationModal
         visible={showNotifications}
         onClose={() => {
           setShowNotifications(false);
-          loadUnreadCount();
+          refreshUnreadCount();
         }}
         colors={colors}
       />
@@ -302,7 +276,7 @@ const styles = StyleSheet.create({
   },
   cardsRow: {
     flexDirection: "row",
-    gap: spacing.md,
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
   },

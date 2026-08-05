@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { spacing, radius, typography } from "../theme/colors";
 import ThemeToggle from "./ThemeToggle";
 import { signalRService } from "../services/signalRService";
+import { useNotifications } from "../context/NotificationContext";
 
 const SIDEBAR_WIDTH = 260;
 
@@ -30,8 +31,8 @@ export default function AppSidebar({
   toggleTheme,
   contextTheme,
   onNotificationPress,
-  unreadCount,
 }) {
+  const { unreadCount } = useNotifications();
   const insets = useSafeAreaInsets();
 
   const handleMenuPress = (screen) => {
@@ -118,7 +119,7 @@ export default function AppSidebar({
                 <Ionicons name="notifications" size={28} color={colors.accentBlue} />
                 {unreadCount > 0 && (
                   <View style={[styles.notificationBadge, { backgroundColor: colors.danger }]}>
-                    <Text style={[styles.notificationBadgeText,{color: colors.textPrimary}]}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+                    <Text style={[styles.notificationBadgeText,{color: colors.white}]}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
                   </View>
                 )}
               </TouchableOpacity>
