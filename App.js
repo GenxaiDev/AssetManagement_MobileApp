@@ -58,28 +58,32 @@ function AppContent() {
   }
 
   return (
-    <SafeAreaProvider style={{ flex: 1 }}>
-      <NavigationContainer>
-        <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-          <Stack.Screen name="AssetRegistration" component={AssetRegistrationScreen} />
-          <Stack.Screen name="IncidentRequest" component={IncidentRequestScreen} />
-          <Stack.Screen name="ServiceRequest" component={ServiceRequestScreen} />
-          <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-          <Stack.Screen name="Dashboard" component={DashboardScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </SafeAreaProvider>
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+        <Stack.Screen name="AssetRegistration" component={AssetRegistrationScreen} />
+        <Stack.Screen name="IncidentRequest" component={IncidentRequestScreen} />
+        <Stack.Screen name="ServiceRequest" component={ServiceRequestScreen} />
+        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+        <Stack.Screen name="Dashboard" component={DashboardScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
 
+import { ToastProvider } from "./src/context/ToastContext";
+
 export default function App() {
   return (
-    <ThemeProvider>
-      <NotificationProvider>
-        <AppContent />
-      </NotificationProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <NotificationProvider>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </NotificationProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

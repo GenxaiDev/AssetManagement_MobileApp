@@ -16,9 +16,12 @@ import { changePassword as changePasswordApi } from "../api/auth/changePassword"
 import { darkTheme, lightTheme } from "../theme/colors";
 import { spacing, radius, typography } from "../theme/colors";
 
+import { useToast } from "../context/ToastContext";
+
 export default function ChangePasswordScreen({ navigation }) {
   const { isDark, theme } = useTheme();
   const colors = isDark ? darkTheme : lightTheme;
+  const { showToast } = useToast();
 
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -27,34 +30,30 @@ export default function ChangePasswordScreen({ navigation }) {
 
   const handleChangePassword = async () => {
     if (!oldPassword || !newPassword || !confirmPassword) {
-      Alert.alert("Error", "Please fill in all fields");
+      showToast("Please fill in all fields", "warning");
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert("Error", "New passwords do not match");
+      showToast("New passwords do not match", "warning");
       return;
     }
 
     if (newPassword.length < 6) {
-      Alert.alert("Error", "New password must be at least 6 characters");
+      showToast("New password must be at least 6 characters", "warning");
       return;
     }
 
     setLoading(true);
     try {
       await changePasswordApi(oldPassword, newPassword, confirmPassword);
-      Alert.alert("Success", "Password changed successfully", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+      showToast("Password changed successfully", "success");
       setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      navigation.goBack();
     } catch (error) {
-      Alert.alert(
-        "Error",
-        error?.response?.data?.message || "Failed to change password"
-      );
+      showToast(error?.response?.data?.message || "Failed to change password", "error");
     } finally {
       setLoading(false);
     }

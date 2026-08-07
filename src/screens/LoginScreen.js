@@ -27,8 +27,11 @@ import { useTheme } from "../context/ThemeContext";
 import { signalRService } from "../services/signalRService";
 import { notificationService } from "../services/notificationService";
 
+import { useToast } from "../context/ToastContext";
+
 export default function LoginScreen({ navigation }) {
   const { isDark, theme, toggleTheme } = useTheme();
+  const { showToast } = useToast();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,7 +39,7 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Missing info", "Please enter both email and password.");
+      showToast("Please enter both email and password.", "warning");
       return;
     }
 
@@ -55,7 +58,7 @@ export default function LoginScreen({ navigation }) {
         user: data,
       });
     } catch (err) {
-      Alert.alert("Login failed", err.message || "Unable to sign in.");
+      showToast(err.message || "Unable to sign in.", "error");
     } finally {
       setLoading(false);
     }

@@ -75,9 +75,12 @@ const schema = z
     },
   );
 
+import { useToast } from "../context/ToastContext";
+
 export default function ServiceRequestScreen({ theme, navigation, route }) {
   const { isDark, toggleTheme, theme: contextTheme } = useTheme();
   const colors = contextTheme || darkTheme;
+  const { showToast } = useToast();
   const asset = route?.params?.asset || null;
   const [assetDetail, setAssetDetail] = useState(asset || null);
 
@@ -435,11 +438,10 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
         issueRaisedOn: form.issueRaisedOn || undefined,
       };
       await createServiceRequest(payload);
-      Alert.alert("Success", "Service request created.", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+      showToast("Service request created successfully.", "success");
+      navigation.goBack();
     } catch (err) {
-      Alert.alert("Error", err.message || "Failed to create service request.");
+      showToast(err.message || "Failed to create service request.", "error");
     } finally {
       setLoading(false);
     }

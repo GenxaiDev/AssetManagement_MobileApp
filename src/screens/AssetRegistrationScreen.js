@@ -10,6 +10,7 @@ import AppSidebar from "../components/AppSidebar";
 import AppHeader from "../components/AppHeader";
 import NotificationModal from "../components/NotificationModal";
 import { useNotifications } from "../context/NotificationContext";
+import { useToast } from "../context/ToastContext";
 
 const SIDEBAR_WIDTH = 260;
 
@@ -74,6 +75,8 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
     setShowNotifications(true);
   };
 
+  const { showToast } = useToast();
+
   const handleBarCodeScanned = async ({ data }) => {
     console.log("data of QR code", data)
     setScanned(true);
@@ -81,10 +84,14 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
     try {
       const asset = await searchAsset(data);
       console.log("asset--------------", asset)
-      setAssetDetails(asset[0]);
-      setShowAssetModal(true);
+      if (asset && asset[0]) {
+        setAssetDetails(asset[0]);
+        setShowAssetModal(true);
+      } else {
+        showToast("Asset not found for this QR code.", "warning");
+      }
     } catch (err) {
-      Alert.alert("Error", "Asset not found for this QR code.");
+      showToast("Asset not found for this QR code.", "error");
     } finally {
       setLoadingAsset(false);
     }
@@ -92,17 +99,21 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
 
   const handleManualSearch = async () => {
     if (!manualCode.trim()) {
-      Alert.alert("Missing info", "Please enter an asset code.");
+      showToast("Please enter an asset code.", "warning");
       return;
     }
     setLoadingAsset(true);
     try {
       const asset = await searchAsset(manualCode.trim());
-      setAssetDetails(asset[0]);
-      setShowAssetModal(true);
-      setManualCode("");
+      if (asset && asset[0]) {
+        setAssetDetails(asset[0]);
+        setShowAssetModal(true);
+        setManualCode("");
+      } else {
+        showToast("Asset not found.", "warning");
+      }
     } catch (err) {
-      Alert.alert("Error", "Asset not found.");
+      showToast("Asset not found.", "error");
     } finally {
       setLoadingAsset(false);
     }
@@ -201,12 +212,12 @@ export default function AssetRegistrationScreen({ theme, navigation, route }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: spacing.sm }}
+          // contentContainerStyle={{ paddingBottom: spacing.sm }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -314,8 +325,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   scannerContainer: {
-    minHeight: 320,
-    flex: 1,
+    height: 570,
     marginHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderRadius: radius.card,
@@ -323,10 +333,11 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   camera: {
-    flex: 1,
+    width: "100%",
+    height: "100%",
   },
   scannerOverlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",

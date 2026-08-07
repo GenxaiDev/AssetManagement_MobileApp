@@ -36,6 +36,8 @@ import { tokenStorage } from "../utils/storage";
 import NotificationModal from "../components/NotificationModal";
 import { useNotifications } from "../context/NotificationContext";
 
+import { useToast } from "../context/ToastContext";
+
 
 const SIDEBAR_WIDTH = 260;
 
@@ -57,6 +59,7 @@ const schema = z.object({
 export default function IncidentRequestScreen({ navigation, route }) {
   const { isDark, toggleTheme, theme } = useTheme();
   const colors = theme;
+  const { showToast } = useToast();
   const asset = route?.params?.asset || null;
   const [assetDetail, setAssetDetail] = useState(asset || null);
 
@@ -342,11 +345,10 @@ export default function IncidentRequestScreen({ navigation, route }) {
         issueRaisedOn: form.issueRaisedOn || undefined,
       };
       await createIncidentRequest(payload);
-      Alert.alert("Success", "Incident request created.", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+      showToast("Incident request created successfully.", "success");
+      navigation.goBack();
     } catch (err) {
-      Alert.alert("Error", err.message || "Failed to create incident request.");
+      showToast(err.message || "Failed to create incident request.", "error");
     } finally {
       setLoading(false);
     }

@@ -25,25 +25,28 @@ import { styles } from "./ForgotPasswordScreen.styles";
 import { forgotPassword as forgotPasswordApi } from "../api/auth/forgotPassword";
 import { useTheme } from "../context/ThemeContext";
 
+import { useToast } from "../context/ToastContext";
+
 export default function ForgotPasswordScreen({ navigation }) {
   const { isDark, theme, toggleTheme } = useTheme();
+  const { showToast } = useToast();
 
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleReset = async () => {
     if (!email) {
-      Alert.alert("Missing info", "Please enter your email address.");
+      showToast("Please enter your email address.", "warning");
       return;
     }
 
     setLoading(true);
     try {
       await forgotPasswordApi(email);
-      Alert.alert("Reset link sent", "Check your email for password reset instructions.");
+      showToast("Check your email for password reset instructions.", "success");
       navigation.goBack();
     } catch (err) {
-      Alert.alert("Request failed", err.message || "Unable to send reset link.");
+      showToast(err.message || "Unable to send reset link.", "error");
     } finally {
       setLoading(false);
     }
