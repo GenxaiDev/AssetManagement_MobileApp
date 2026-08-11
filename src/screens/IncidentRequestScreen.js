@@ -294,7 +294,7 @@ export default function IncidentRequestScreen({ navigation, route }) {
     }
     setAssetSearchLoading(true);
     try {
-      const res = await searchAsset(text.trim());
+      const res = await searchAsset(text.trim(), { assetStatus: "In Stock,Allocated,Incident Reported,Handed Over" });
       const list = Array.isArray(res) ? res : res ? [res] : [];
       setAssetSearchResults(list);
     } catch (err) {
@@ -512,7 +512,18 @@ export default function IncidentRequestScreen({ navigation, route }) {
                                 </View>
                                 <Text
                                   style={{
-                                    color: colors.textSecondary,
+                                    color:
+                                      item.assetStatus === "In Stock"
+                                        ? colors.accentGreen
+                                        : item.assetStatus === "Allocated"
+                                        ? colors.accentBlue
+                                        : item.assetStatus === "Under Repair" ||
+                                          item.assetStatus === "Under Service" ||
+                                          item.assetStatus === "Incident Reported"
+                                        ? colors.warning
+                                        : item.assetStatus === "Disposed"
+                                        ? colors.danger
+                                        : colors.textSecondary,
                                     fontFamily: typography.fontBody,
                                     fontSize: typography.small,
                                   }}

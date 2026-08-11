@@ -7,8 +7,8 @@ export const getAssets = async (filters = {}) => {
   return response.data;
 };
 
-export const searchAsset = async (assetCode) => {
-  const response = await client.get("/asset", { params: { searchText: assetCode } });
+export const searchAsset = async (assetCode, filter) => {
+  const response = await client.get("/asset", { params: { searchText: assetCode, ...filter } });
   const list = response.data?.data || response.data;
   return list;
 };
