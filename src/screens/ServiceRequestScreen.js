@@ -350,7 +350,7 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
     }
     setAssetSearchLoading(true);
     try {
-      const res = await searchAsset(text.trim());
+      const res = await searchAsset(text.trim(), { assetStatus: "In Stock,Allocated,Under Service,Handed Over" });
       console.log("res--------", res)
       const list = Array.isArray(res) ? res : res ? [res] : [];
       setAssetSearchResults(list);
@@ -598,7 +598,18 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
                     </View>
                     <Text
                       style={{
-                        color: colors.textSecondary,
+                        color:
+                          item.assetStatus === "In Stock"
+                            ? colors.accentGreen
+                            : item.assetStatus === "Allocated"
+                            ? colors.accentBlue
+                            : item.assetStatus === "Under Repair" ||
+                              item.assetStatus === "Under Service" ||
+                              item.assetStatus === "Incident Reported"
+                            ? colors.warning
+                            : item.assetStatus === "Disposed"
+                            ? colors.danger
+                            : colors.textSecondary,
                         fontFamily: typography.fontBody,
                         fontSize: typography.small,
                       }}
