@@ -119,12 +119,13 @@ export default function IncidentRequestScreen({ navigation, route }) {
      loadAuth();
    }, []);
 
-   useEffect(() => {
-     if (asset) {
-      setForm((f) => ({ ...f, assetId: asset.id || asset.assetId || "" }));
-      setAssetDetail(asset);
-    }
-  }, [asset]);
+    useEffect(() => {
+      if (asset) {
+       setForm((f) => ({ ...f, assetId: asset.id || asset.assetId || "" }));
+       setAssetDetail(asset);
+       setAssetSearchText(asset.assetCode || asset.code || String(asset.id || asset.assetId || ""));
+     }
+   }, [asset]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -282,7 +283,12 @@ export default function IncidentRequestScreen({ navigation, route }) {
   // ─── Asset search (fallback, when no "Raised By" user is selected) ────
   const runAssetSearch = async (text) => {
     setAssetSearchText(text);
+
     if (!text.trim()) {
+      if (form.assetId) {
+        updateForm("assetId", "");
+        setAssetDetail(null);
+      }
       setAssetSearchResults([]);
       return;
     }
@@ -299,10 +305,10 @@ export default function IncidentRequestScreen({ navigation, route }) {
   };
 
   const selectSearchedAsset = (a) => {
+    const code = a.assetCode || a.code || String(a.assetId || a.id);
     setAssetDetail(a);
     updateForm("assetId", a.assetId || a.id);
-    setShowAssetSearch(false);
-    setAssetSearchText("");
+    setAssetSearchText(code);
     setAssetSearchResults([]);
   };
 
@@ -452,36 +458,73 @@ export default function IncidentRequestScreen({ navigation, route }) {
                             ))}
                           </Picker>
                         </View>
-                      ) : ( */}
-                        <TouchableOpacity
-                          style={[
-                            styles.pickerWrap,
-                            {
-                              borderColor: colors.inputBorder,
-                              backgroundColor: colors.inputBackground,
-                            },
-                          ]}
-                          onPress={() => setShowAssetSearch(true)}
-                        >
-                          <Text
-                            style={{
-                              color: form.assetId
-                                ? colors.textPrimary
-                                : colors.placeholder,
-                              padding: 12,
-                            }}
+                         ) : ( */}
+            <InputField
+                            placeholder="Asset code or QR data..."
+                            value={assetSearchText}
+                            onChangeText={runAssetSearch}
+                            theme={colors}
+                          />
+                          <ScrollView
+                            style={[{ maxHeight: 300, padding: spacing.md, marginBottom: spacing.md, marginTop: -8, backgroundColor: colors.inputBackground,
+                                      borderColor: colors.inputBorder,
+                                      borderWidth: 1.5, borderRadius: 12 }, assetSearchResults.length === 0 && { display: "none" }]}
+                                            nestedScrollEnabled={true}
+                                            showsVerticalScrollIndicator={true}
                           >
-                            {form.assetId
-                              ? assetDetail
-                                ? assetDetail.assetCode || assetDetail.code || `#${form.assetId}`
-                                : `#${form.assetId}`
-                              : "Search asset by code…"}
-                          </Text>
-                        </TouchableOpacity>
-                      {/* )} */}
-                      {errors.assetId && (
-                        <Text style={styles.errorText}>{errors.assetId}</Text>
-                      )}
+                            {assetSearchResults.map((item, idx) => (
+                              <TouchableOpacity
+                                key={String(item.assetId || item.id || idx)}
+                                style={[
+                                  styles.userItem,
+                                  {
+                                    borderBottomColor: colors.cardBorder,
+                                    flexDirection: "row",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    paddingVertical: 8,
+                                  },
+                                ]}
+                                onPress={() => selectSearchedAsset(item)}
+                              >
+                                <View>
+                                  <Text
+                                    style={{
+                                      color: colors.textPrimary,
+                                      fontFamily: typography.fontBodySemiBold,
+                                    }}
+                                  >
+                                    {item.assetCode ||
+                                      item.code ||
+                                      `#${item.assetId || item.id}`}
+                                  </Text>
+                                  {!!item.assetTypeName && (
+                                    <Text
+                                      style={{
+                                        color: colors.textSecondary,
+                                        fontFamily: typography.fontBody,
+                                        fontSize: typography.small,
+                                      }}
+                                    >
+                                      {item.assetTypeName}
+                                    </Text>
+                                  )}
+                                </View>
+                                <Text
+                                  style={{
+                                    color: colors.textSecondary,
+                                    fontFamily: typography.fontBody,
+                                    fontSize: typography.small,
+                                  }}
+                                >
+                                  {item.assetStatus}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+            {errors.assetId && (
+              <Text style={styles.errorText}>{errors.assetId}</Text>
+            )}
           <View style={styles.row}>
             <View style={styles.fieldHalf}>
               <Text style={[styles.label, { color: colors.textMuted }]}>CATEGORY</Text>
@@ -761,76 +804,7 @@ export default function IncidentRequestScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* Asset search modal (fallback when no Raised By user set) */}
-      <Modal visible={showAssetSearch} animationType="slide" transparent>
-        <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.7)" }]}>
-          <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Search Asset</Text>
-              <TouchableOpacity onPress={() => { setShowAssetSearch(false); setAssetSearchText(""); setAssetSearchResults([]); }}>
-                <Ionicons name="close" size={22} color={colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <InputField
-              placeholder="Asset code or QR data..."
-              value={assetSearchText}
-              onChangeText={runAssetSearch}
-              theme={colors}
-            />
-            <FlatList
-              data={assetSearchResults}
-              keyExtractor={(item, idx) => String(item.assetId || item.id || idx)}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.userItem,
-                    { borderBottomColor: colors.cardBorder, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-                  ]}
-                  onPress={() => selectSearchedAsset(item)}
-                >
-                  <View>
-                    <Text
-                      style={{
-                        color: colors.textPrimary,
-                        fontFamily: typography.fontBodySemiBold,
-                      }}
-                    >
-                      {item.assetCode ||
-                        item.code ||
-                        `#${item.assetId || item.id}`}
-                    </Text>
-                    {!!item.assetTypeName && (
-                      <Text
-                        style={{
-                          color: colors.textSecondary,
-                          fontFamily: typography.fontBody,
-                          fontSize: typography.small,
-                        }}
-                      >
-                        {item.assetTypeName}
-                      </Text>
-                    )}
-                    </View>
-                    <Text
-                      style={{
-                        color: colors.textSecondary,
-                        fontFamily: typography.fontBody,
-                        fontSize: typography.small,
-                      }}
-                    >
-                      {item.assetStatus}
-                    </Text>
-                  </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <Text style={{ color: colors.textMuted, textAlign: "center", marginVertical: spacing.md }}>
-                  {assetSearchLoading ? "Searching…" : "Type to search for an asset"}
-                </Text>
-              }
-            />
-          </View>
-        </View>
-      </Modal>
+
 
       {sidebarOpen && (
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={closeSidebar} />

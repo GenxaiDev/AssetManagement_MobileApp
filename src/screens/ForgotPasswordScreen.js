@@ -91,7 +91,7 @@ export default function ForgotPasswordScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
           <Text style={[styles.heroTitle, { color: theme.textPrimary }]}>
-            Reset <Text style={[styles.heroTitle, { color: theme.accentBlue }]}>Password</Text>
+            Forgot <Text style={[styles.heroTitle, { color: theme.accentBlue }]}>Password</Text>
           </Text>
 
           <Text style={[styles.heroDesc, { color: theme.textSecondary }]}>

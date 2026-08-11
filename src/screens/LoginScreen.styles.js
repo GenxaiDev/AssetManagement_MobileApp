@@ -52,6 +52,7 @@ export const styles = StyleSheet.create({
     fontFamily: typography.fontHeading,
     fontSize: typography.h2,
     lineHeight: typography.h2 + 4,
+    textAlign: "center",
   },
   heroDesc: {
     fontFamily: typography.fontBody,
@@ -59,7 +60,8 @@ export const styles = StyleSheet.create({
     lineHeight: 22,
     marginTop: spacing.md,
     marginBottom: spacing.lg,
-    maxWidth: "88%",
+    // maxWidth: "88%",
+    textAlign: "center",
   },
   featureRow: {
     flexDirection: "row",

@@ -107,7 +107,7 @@ export default function LoginScreen({ navigation }) {
           </Text>
           </Text>
           
-          <Text style={[styles.heroDesc, { color: theme.textSecondary }]}>
+          <Text style={[styles.heroDesc, { color: theme.textSecondary}]}>
             Track, manage and optimise your assets across all locations —
             offices, depots and RSRTC client sites.
           </Text>

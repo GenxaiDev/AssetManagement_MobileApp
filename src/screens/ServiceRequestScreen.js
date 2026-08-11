@@ -150,19 +150,24 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
      if (asset) {
       setForm((f) => ({ ...f, assetId: asset.assetId || "" }));
       setAssetDetail(asset);
+      setAssetSearchText(asset.assetCode || asset.code || String(asset.assetId || ""));
     }
   }, [asset]);
 
   useEffect(() => {
     if (!authUser) return;
-    const isLocationManager = authUser.roleName.toLowerCase() === "location manager";
+    const isLocationManager =
+      authUser.roleName.toLowerCase() === "location manager";
     setForm((f) => ({
       ...f,
-      assignedToUserId: isLocationManager ? "" : (locations.find((l) => l.locationId === authUser?.locationId)?.managerUserId || ""),
-      requestedByUserId: isLocationManager ? "" : (authUser.userId || ""),
-      requestedByName: isLocationManager ? "" : (authUser.fullName || ""),
-      requestedByPhone: isLocationManager ? "" : (authUser.phone || ""),
-      requestedByEmail: isLocationManager ? "" : (authUser.companyEmail || ""),
+      assignedToUserId: isLocationManager
+        ? ""
+        : locations.find((l) => l.locationId === authUser?.locationId)
+            ?.managerUserId || "",
+      requestedByUserId: isLocationManager ? "" : authUser.userId || "",
+      requestedByName: isLocationManager ? "" : authUser.fullName || "",
+      requestedByPhone: isLocationManager ? "" : authUser.phone || "",
+      requestedByEmail: isLocationManager ? "" : authUser.companyEmail || "",
     }));
   }, [authUser, locations]);
 
@@ -333,7 +338,13 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
   // ─── Asset search (fallback, when no "Raised By" user is selected) ────
   const runAssetSearch = async (text) => {
     setAssetSearchText(text);
+    
+    // Clear selection if the search text is empty
     if (!text.trim()) {
+      if (form.assetId) {
+        updateForm("assetId", "");
+        setAssetDetail(null);
+      }
       setAssetSearchResults([]);
       return;
     }
@@ -351,10 +362,10 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
   };
 
   const selectSearchedAsset = (a) => {
+    const code = a.assetCode || a.code || String(a.assetId || a.id);
     setAssetDetail(a);
     updateForm("assetId", a.assetId || a.id);
-    setShowAssetSearch(false);
-    setAssetSearchText("");
+    setAssetSearchText(code);
     setAssetSearchResults([]);
   };
 
@@ -509,35 +520,98 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
                 </Picker>
               </View>
             ) : ( */}
-              <TouchableOpacity
-                style={[
-                  styles.pickerWrap,
-                  {
-                    borderColor: colors.inputBorder,
-                    backgroundColor: colors.inputBackground,
-                  },
-                ]}
-                onPress={() => setShowAssetSearch(true)}
+          {/* <TouchableOpacity
+            style={[
+              styles.pickerWrap,
+              {
+                borderColor: colors.inputBorder,
+                backgroundColor: colors.inputBackground,
+              },
+            ]}
+            onPress={() => setShowAssetSearch(true)}
+          >
+            <Text
+              style={{
+                color: form.assetId ? colors.textPrimary : colors.placeholder,
+                padding: 12,
+              }}
+            >
+              {form.assetId
+                ? assetDetail
+                  ? assetDetail.assetCode ||
+                    assetDetail.code ||
+                    `#${form.assetId}`
+                  : `#${form.assetId}`
+                : "Search asset by code…"}
+            </Text>
+          </TouchableOpacity> */}
+              <InputField
+                placeholder="Asset code or QR data..."
+                value={assetSearchText}
+                onChangeText={runAssetSearch}
+                theme={colors}
+              />
+              <ScrollView
+                style={[{ maxHeight: 350, padding: spacing.md, marginBottom: spacing.md, marginTop: -8, backgroundColor: colors.inputBackground,
+          borderColor: colors.inputBorder,
+          borderWidth: 1.5, borderRadius: 12 }, assetSearchResults.length === 0 && { display: "none" }]}
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={true}
               >
-                <Text
-                  style={{
-                    color: form.assetId
-                      ? colors.textPrimary
-                      : colors.placeholder,
-                    padding: 12,
-                  }}
-                >
-                  {form.assetId
-                    ? assetDetail
-                      ? assetDetail.assetCode || assetDetail.code || `#${form.assetId}`
-                      : `#${form.assetId}`
-                    : "Search asset by code…"}
-                </Text>
-              </TouchableOpacity>
-            {/* )} */}
-            {errors.assetId && (
-              <Text style={styles.errorText}>{errors.assetId}</Text>
-            )}
+                {assetSearchResults.map((item, idx) => (
+                  <TouchableOpacity
+                    key={String(item.assetId || item.id || idx)}
+                    style={[
+                      styles.userItem,
+                      {
+                        borderBottomColor: colors.cardBorder,
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        paddingVertical: 8,
+                      },
+                    ]}
+                    onPress={() => selectSearchedAsset(item)}
+                  >
+                    <View>
+                      <Text
+                        style={{
+                          color: colors.textPrimary,
+                          fontFamily: typography.fontBodySemiBold,
+                        }}
+                      >
+                        {item.assetCode ||
+                          item.code ||
+                          `#${item.assetId || item.id}`}
+                      </Text>
+                      {!!item.assetTypeName && (
+                        <Text
+                          style={{
+                            color: colors.textSecondary,
+                            fontFamily: typography.fontBody,
+                            fontSize: typography.small,
+                          }}
+                        >
+                          {item.assetTypeName}
+                        </Text>
+                      )}
+                    </View>
+                    <Text
+                      style={{
+                        color: colors.textSecondary,
+                        fontFamily: typography.fontBody,
+                        fontSize: typography.small,
+                      }}
+                    >
+                      {item.assetStatus}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+          {/* )} */}
+          {errors.assetId && (
+            <Text style={styles.errorText}>{errors.assetId}</Text>
+          )}
           <View style={styles.row}>
             <View style={styles.fieldHalf}>
               <Text style={[styles.label, { color: colors.textMuted }]}>
@@ -600,34 +674,30 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
           </View>
 
           {/* <View style={styles.row}> */}
-            {/* <View style={styles.fieldHalf}> */}
-              <Text style={[styles.label, { color: colors.textMuted }]}>
-                TYPE
-              </Text>
-              <View
-                style={[
-                  styles.pickerWrap,
-                  {
-                    borderColor: colors.inputBorder,
-                    backgroundColor: colors.inputBackground,
-                  },
-                ]}
-              >
-                <Picker
-                  selectedValue={form.maintenanceType}
-                  onValueChange={(val) => updateForm("maintenanceType", val)}
-                  style={{ color: colors.textPrimary }}
-                  dropdownIconColor={colors.textPrimary}
-                >
-                  <Picker.Item label="— Select Type —" value="" />
-                  {["Corrective", "Preventive", "AMC Visit", "Upgrade"].map(
-                    (t) => (
-                      <Picker.Item key={t} label={t} value={t} />
-                    ),
-                  )}
-                </Picker>
-              </View>
-            {/* </View>
+          {/* <View style={styles.fieldHalf}> */}
+          <Text style={[styles.label, { color: colors.textMuted }]}>TYPE</Text>
+          <View
+            style={[
+              styles.pickerWrap,
+              {
+                borderColor: colors.inputBorder,
+                backgroundColor: colors.inputBackground,
+              },
+            ]}
+          >
+            <Picker
+              selectedValue={form.maintenanceType}
+              onValueChange={(val) => updateForm("maintenanceType", val)}
+              style={{ color: colors.textPrimary }}
+              dropdownIconColor={colors.textPrimary}
+            >
+              <Picker.Item label="— Select Type —" value="" />
+              {["Corrective", "Preventive", "AMC Visit", "Upgrade"].map((t) => (
+                <Picker.Item key={t} label={t} value={t} />
+              ))}
+            </Picker>
+          </View>
+          {/* </View>
             <View style={styles.fieldHalf}>
               <Text style={[styles.label, { color: colors.textMuted }]}>
                 ISSUE RAISED ON
@@ -1110,38 +1180,43 @@ export default function ServiceRequestScreen({ theme, navigation, route }) {
                   <TouchableOpacity
                     style={[
                       styles.userItem,
-                      { borderBottomColor: colors.cardBorder, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+                      {
+                        borderBottomColor: colors.cardBorder,
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      },
                     ]}
                     onPress={() => selectSearchedAsset(item)}
                   >
                     <View>
                       <Text
-                      style={{
-                        color: colors.textPrimary,
-                        fontFamily: typography.fontBodySemiBold,
-                      }}
-                    >
-                      {item.assetCode ||
-                        item.code ||
-                        `#${item.assetId || item.id}`}
-                    </Text>
-                    {!!item.assetTypeName && (
-                      <Text
                         style={{
-                          color: colors.textSecondary,
-                          fontFamily: typography.fontBody,
-                          fontSize: typography.small,
+                          color: colors.textPrimary,
+                          fontFamily: typography.fontBodySemiBold,
                         }}
                       >
-                        {item.assetTypeName}
+                        {item.assetCode ||
+                          item.code ||
+                          `#${item.assetId || item.id}`}
                       </Text>
-                    )}
+                      {!!item.assetTypeName && (
+                        <Text
+                          style={{
+                            color: colors.textSecondary,
+                            fontFamily: typography.fontBody,
+                            fontSize: typography.small,
+                          }}
+                        >
+                          {item.assetTypeName}
+                        </Text>
+                      )}
                     </View>
                     <Text
                       style={{
                         color: colors.textSecondary,
-                          fontFamily: typography.fontBody,
-                          fontSize: typography.small,
+                        fontFamily: typography.fontBody,
+                        fontSize: typography.small,
                       }}
                     >
                       {item.assetStatus}
